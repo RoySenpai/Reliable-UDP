@@ -61,7 +61,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	RUDP_Socket server_sockfd(true, port, RUDP_MTU_DEFAULT, RUDP_SOCKET_TIMEOUT_DEFAULT, RUDP_MAX_RETRIES_DEFAULT);
+	RUDP_Socket server_sockfd(true, port, RUDP_MTU_DEFAULT, RUDP_SOCKET_TIMEOUT_DEFAULT, RUDP_MAX_RETRIES_DEFAULT, true);
 	std::cout << "Server is listening on port " << port << "..." << std::endl;
 
 	try
@@ -119,6 +119,8 @@ int main(int argc, char **argv)
 					return 1;
 				}
 			}
+
+			std::cout << "Received " << bytes_read << " bytes from client." << std::endl;
 		}
 
 		catch (const std::exception &e)

@@ -15,11 +15,12 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <exception>
 #include "include/RUDP_API.hpp"
 #include "include/RUDP_API_wrap.hpp"
 
-RUDP_Socket::RUDP_Socket(bool isServer, uint16_t listen_port, uint16_t MTU, uint16_t timeout, uint16_t max_retries) {
-	_socket = new RUDP_Socket_p(isServer, listen_port, MTU, timeout, max_retries);
+RUDP_Socket::RUDP_Socket(bool isServer, uint16_t listen_port, uint16_t MTU, uint16_t timeout, uint16_t max_retries, bool debug_mode) {
+	_socket = new RUDP_Socket_p(isServer, listen_port, MTU, timeout, max_retries, debug_mode);
 }
 
 RUDP_Socket::~RUDP_Socket() {

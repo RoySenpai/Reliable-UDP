@@ -49,6 +49,7 @@ char *util_generate_random_data(unsigned int size)
 int main(int argc, char **argv)
 {
 	int port = 0;
+	bool isOK = true;
 
 	// Argument check.
 	if (argc != 5)
@@ -75,7 +76,7 @@ int main(int argc, char **argv)
 	fprintf(stdout, "Argument check passed, starting the program...\n");
 
 	// Create a new RUDP socket.
-	RUDP_socket client_socket = rudp_socket(false, 0, RUDP_MTU_DEFAULT, RUDP_SOCKET_TIMEOUT_DEFAULT, RUDP_MAX_RETRIES_DEFAULT);
+	RUDP_socket client_socket = rudp_socket(false, 0, RUDP_MTU_DEFAULT, RUDP_SOCKET_TIMEOUT_DEFAULT, RUDP_MAX_RETRIES_DEFAULT, true);
 
 	if (client_socket == NULL)
 	{
@@ -109,14 +110,29 @@ int main(int argc, char **argv)
 
 	while (true)
 	{
-		rudp_send(client_socket, "READY", 5);
+		int sent = rudp_send(client_socket, "READY", 5);
+
+		if (sent <= 0)
+		{
+			fprintf(stderr, "Failed to send the READY message.\n");
+			isOK = false;
+			break;
+		}
+
 		fprintf(stdout, "Sending %d bytes of data...\n", RUDP_FILE_SIZE);
 
 		struct timeval start, end;
 
 		gettimeofday(&start, NULL);
-		rudp_send(client_socket, data, RUDP_FILE_SIZE);
+		sent = rudp_send(client_socket, data, RUDP_FILE_SIZE);
 		gettimeofday(&end, NULL);
+
+		if (sent <= 0)
+		{
+			fprintf(stderr, "Failed to send the data.\n");
+			isOK = false;
+			break;
+		}
 
 		// Calculate the time it took to send the data.
 		double time_taken = (end.tv_sec - start.tv_sec) * 1000.0 + ((double)end.tv_usec - start.tv_usec) / 1000.0;
@@ -144,8 +160,16 @@ int main(int argc, char **argv)
 		fprintf(stdout, "Continuing...\n");
 	}
 
-	fprintf(stdout, "Closing the connection...\n");
-	rudp_disconnect(client_socket);
+	if (isOK)
+	{
+		fprintf(stdout, "Successfully sent all the data.\n");
+		fprintf(stdout, "Closing the connection...\n");
+		rudp_disconnect(client_socket);
+	}
+
+	else
+		fprintf(stderr, "An error occurred\n");
+	
 	free(client_socket);
 	free(data);
 

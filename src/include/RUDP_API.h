@@ -26,30 +26,37 @@ extern "C"
 #include <stdbool.h>
 #include <stdint.h>
 
+	/*
+	* @brief This represents a RUDP socket.
+	*/
 	typedef void* RUDP_socket;
 
 	/*
 	 * @brief Create a new RUDP socket.
 	 * @param isServer True if the RUDP socket acts like a server, false for client.
 	 * @param listen_port The port number to listen on, if the socket is a server. Ignored if the socket is a client.
+	 * @param MTU The Maximum Transmission Unit of the network, default is RUDP_MTU_DEFAULT which is 1458 bytes.
+	 * @param timeout Maximum waiting time for an ACK / SYN-ACK packet in milliseconds, default is RUDP_SOCKET_TIMEOUT_DEFAULT which is 100 milliseconds.
+	 * @param max_retries The maximum number of retries for a packet, before giving up, default is RUDP_MAX_RETRIES_DEFAULT which is 50 retries.
+	 * @param debug_mode True to enable debug mode, false otherwise. Default is false.
 	 * @note If the socket is a server, it will listen on the specified port.
-	 * @return A pointer to the RUDP socket.
+	 * @return A pointer to the RUDP socket, or NULL if the socket creation fails (also prints an error message).
 	 */
-	RUDP_socket rudp_socket(bool isServer, uint16_t listen_port, uint16_t MTU, uint16_t timeout, uint16_t max_retries);
+	RUDP_socket rudp_socket(bool isServer, uint16_t listen_port, uint16_t MTU, uint16_t timeout, uint16_t max_retries, bool debug_mode);
 
 	/*
 	 * @brief Connect to a remote RUDP server.
 	 * @param socket The RUDP socket to connect with.
 	 * @param dest_ip The IP address of the remote server.
 	 * @param dest_port The port number of the remote server.
-	 * @return True if the connection is successful, false otherwise.
+	 * @return True if the connection is successful, false otherwise (also prints an error message).
 	 */
 	bool rudp_connect(RUDP_socket socket, const char *dest_ip, uint16_t dest_port);
 
 	/*
 	 * @brief Accept an incoming connection from a remote RUDP client.
 	 * @param socket The RUDP socket to accept the connection.
-	 * @return True if the connection is successful, false otherwise.
+	 * @return True if the connection is successful, false otherwise (also prints an error message).
 	 */
 	bool rudp_accept(RUDP_socket socket);
 
@@ -58,7 +65,7 @@ extern "C"
 	 * @param socket The RUDP socket to receive data from.
 	 * @param buffer Buffer to store the received data.
 	 * @param buffer_size Size of the buffer.
-	 * @return Number of bytes received.
+	 * @return Number of bytes received or -1 if an error occurs (also prints an error message).
 	 */
 	int rudp_recv(RUDP_socket socket, void *buffer, uint32_t buffer_size);
 
@@ -67,14 +74,14 @@ extern "C"
 	 * @param socket The RUDP socket to send data to.
 	 * @param buffer Buffer containing the data to be sent.
 	 * @param buffer_size Size of the buffer.
-	 * @return Number of bytes sent.
+	 * @return Number of bytes sent or -1 if an error occurs (also prints an error message).
 	 */
 	int rudp_send(RUDP_socket socket, void *buffer, uint32_t buffer_size);
 
 	/*
 	 * @brief Disconnect from the connected peer.
 	 * @param socket The RUDP socket to disconnect.
-	 * @return True if the disconnection is successful, false otherwise.
+	 * @return True if the disconnection is successful, false otherwise (also prints an error message).
 	 */
 	bool rudp_disconnect(RUDP_socket socket);
 

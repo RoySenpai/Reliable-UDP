@@ -25,9 +25,19 @@ extern "C"
 {
 #endif
 
-	RUDP_socket rudp_socket(bool isServer, uint16_t listen_port, uint16_t MTU, uint16_t timeout, uint16_t max_retries)
+	RUDP_socket rudp_socket(bool isServer, uint16_t listen_port, uint16_t MTU, uint16_t timeout, uint16_t max_retries, bool debug_mode)
 	{
-		return (RUDP_socket)(new RUDP_Socket_p(isServer, listen_port, MTU, timeout, max_retries));
+		try
+		{
+			return (RUDP_socket)(new RUDP_Socket_p(isServer, listen_port, MTU, timeout, max_retries, debug_mode));
+		}
+
+		catch (const std::exception &e)
+		{
+			std::cerr << "rudp_socket() exception at object creation in RUDP_Socket_p():" << std::endl;
+			std::cerr << "\t" << e.what() << std::endl;
+			return NULL;
+		}
 	}
 
 	bool rudp_connect(RUDP_socket socket, const char *dest_ip, uint16_t dest_port)
@@ -41,7 +51,10 @@ extern "C"
 
 		catch (const std::exception &e)
 		{
-			std::cerr << e.what() << std::endl;
+			typedef bool (RUDP_Socket_p::*ConnectMethod)(const char*, uint16_t);
+			ConnectMethod connectMethod = &RUDP_Socket_p::connect;
+			std::cerr << "rudp_connect() exception at " << static_cast<void*>(sock) << " in " << reinterpret_cast<void*&>(connectMethod) << " (connect):" << std::endl;
+			std::cerr << "\t" << e.what() << std::endl;
 			return false;
 		}
 
@@ -59,7 +72,10 @@ extern "C"
 
 		catch (const std::exception &e)
 		{
-			std::cerr << e.what() << std::endl;
+			typedef bool (RUDP_Socket_p::*AcceptMethod)();
+			AcceptMethod acceptMethod = &RUDP_Socket_p::accept;
+			std::cerr << "rudp_accept() exception at " << static_cast<void*>(sock) << " in " << reinterpret_cast<void*&>(acceptMethod) << " (accept):" << std::endl;
+			std::cerr << "\t" << e.what() << std::endl;
 			return false;
 		}
 
@@ -77,7 +93,10 @@ extern "C"
 
 		catch (const std::exception &e)
 		{
-			std::cerr << e.what() << std::endl;
+			typedef int (RUDP_Socket_p::*RecvMethod)(void*, uint32_t);
+			RecvMethod recvMethod = &RUDP_Socket_p::recv;
+			std::cerr << "rudp_recv() exception at " << static_cast<void*>(sock) << " in " << reinterpret_cast<void*&>(recvMethod) << " (recv):" << std::endl;
+			std::cerr << "\t" << e.what() << std::endl;
 			return -1;
 		}
 
@@ -95,7 +114,10 @@ extern "C"
 
 		catch (const std::exception &e)
 		{
-			std::cerr << e.what() << std::endl;
+			typedef int (RUDP_Socket_p::*SendMethod)(void*, uint32_t);
+			SendMethod sendMethod = &RUDP_Socket_p::send;
+			std::cerr << "rudp_send() exception at " << static_cast<void*>(sock) << " in " << reinterpret_cast<void*&>(sendMethod) << " (send):" << std::endl;
+			std::cerr << "\t" << e.what() << std::endl;
 			return -1;
 		}
 
@@ -113,7 +135,10 @@ extern "C"
 
 		catch (const std::exception &e)
 		{
-			std::cerr << e.what() << std::endl;
+			typedef bool (RUDP_Socket_p::*DisconnectMethod)();
+			DisconnectMethod disconnectMethod = &RUDP_Socket_p::disconnect;
+			std::cerr << "rudp_disconnect() exception at " << static_cast<void*>(sock) << " in " << reinterpret_cast<void*&>(disconnectMethod) << " (disconnect):" << std::endl;
+			std::cerr << "\t" << e.what() << std::endl;
 			return false;
 		}
 

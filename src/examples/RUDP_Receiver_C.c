@@ -60,7 +60,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	RUDP_socket server_socket = rudp_socket(true, port, RUDP_MTU_DEFAULT, RUDP_SOCKET_TIMEOUT_DEFAULT, RUDP_MAX_RETRIES_DEFAULT);
+	RUDP_socket server_socket = rudp_socket(true, port, RUDP_MTU_DEFAULT, RUDP_SOCKET_TIMEOUT_DEFAULT, RUDP_MAX_RETRIES_DEFAULT, true);
 
 	if (server_socket == NULL)
 	{

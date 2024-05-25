@@ -20,9 +20,9 @@
 #include <netinet/in.h>
 
 /*
- * @brief The MTU (Maximum Transmission Unit) of the network, default is 1500 bytes.
+ * @brief The MTU (Maximum Transmission Unit) of the network, default is 1458 bytes.
  */
-#define RUDP_MTU_DEFAULT 1500
+#define RUDP_MTU_DEFAULT 1458
 
 /*
  * @brief Maximum waiting time for an ACK / SYN-ACK packet in milliseconds, default is 100 milliseconds.
@@ -62,6 +62,16 @@
  */
 #define RUDP_FLAG_FIN 0x10
 
+/*
+ * @brief The RUDP header.
+ * @param seq_num Sequence number of the packet (used for tracking which packet is which).
+ * @param length Length of the data in bytes, without the header.
+ * @param checksum Checksum of the packet, including the header.
+ * @param flags Flags of the packet.
+ * @param _reserved Reserved for future use. Currently is set to 0.
+ * @note This is the header of the RUDP packet, it is 12 bytes long.
+ * @attention This is for internal use only, manipulating this directly can cause undefined behavior for the library.
+ */
 struct RUDP_header
 {
 	/*
@@ -101,6 +111,10 @@ struct RUDP_header
 	uint8_t _reserved[3] = {0};
 };
 
+/*
+* @brief A class that represents a Reliable UDP socket.
+* @attention Only use this internally in the library. For external usage, use the wrapper class RUDP_Socket (C++) or RUDP_socket (C).
+*/
 class RUDP_Socket_p
 {
 	private:
@@ -118,6 +132,11 @@ class RUDP_Socket_p
 		* @brief True if there is an active connection, false otherwise.
 		*/
 		bool _is_connected = false;
+
+		/*
+		* @brief True for debug mode (slower), false for normal mode.
+		*/
+		bool _debug_mode = false;
 
 		/*
 		* @brief Destination address.
@@ -146,6 +165,7 @@ class RUDP_Socket_p
 		* @param data The data to do the checksum for.
 		* @param bytes The length of the data in bytes.
 		* @return The checksum itself as 16 bit unsigned number.
+		* @note This is an internal method, its not exposed to the user.
 		*/
 		uint16_t _calculate_checksum(void *data, uint32_t data_size);
 
@@ -154,6 +174,7 @@ class RUDP_Socket_p
 		* @param flags Flags to be set in the control packet.
 		* @param seq_num Sequence number of the control packet.
 		* @note This function doesn't actually check if the packet is received by the peer.
+		* @note This is an internal method, its not exposed to the user.
 		*/
 		void _send_control_packet(uint8_t flags, uint32_t seq_num);
 
@@ -163,6 +184,7 @@ class RUDP_Socket_p
 		* @param packet_size Size of the packet in bytes.
 		* @param expected_flags Expected flags in the packet.
 		* @return 1 if the packet is valid, 0 if not, -1 if the packet if a FIN packet.
+		* @note This is an internal method, its not exposed to the user.
 		*/
 		int _check_packet_validity(void *packet, uint32_t packet_size, uint8_t expected_flags);
 
@@ -174,9 +196,11 @@ class RUDP_Socket_p
 		* @param MTU The MTU (Maximum Transmission Unit) of the network, default is 1500 bytes.
 		* @param timeout Maximum waiting time for an ACK / SYN-ACK packet in milliseconds, default is 100 milliseconds.
 		* @param max_retries The maximum number of retries for a packet, before giving up, default is 50 retries.
+		* @param debug_mode True to enable debug mode, false otherwise. Default is false.
 		* @note If the socket is a server, it will listen on the specified port.
+		* @throws std::runtime_error if the socket creation fails, or if bind() fails.
 		*/
-		RUDP_Socket_p(bool isServer, uint16_t listen_port, uint16_t MTU = RUDP_MTU_DEFAULT, uint16_t timeout = RUDP_SOCKET_TIMEOUT_DEFAULT, uint16_t max_retries = RUDP_MAX_RETRIES_DEFAULT);
+		RUDP_Socket_p(bool isServer, uint16_t listen_port, uint16_t MTU = RUDP_MTU_DEFAULT, uint16_t timeout = RUDP_SOCKET_TIMEOUT_DEFAULT, uint16_t max_retries = RUDP_MAX_RETRIES_DEFAULT, bool debug_mode = false);
 
 		/*
 		* @brief Destructor.

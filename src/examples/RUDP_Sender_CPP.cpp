@@ -49,6 +49,7 @@ char *util_generate_random_data(unsigned int size)
 int main(int argc, char **argv)
 {
 	int port = 0;
+	bool isOK = true;
 
 	// Argument check.
 	if (argc != 5)
@@ -74,8 +75,8 @@ int main(int argc, char **argv)
 
 	std::cout << "Argument check passed, starting the program..." << std::endl;
 
-	// Create a new RUDP socket.
-	RUDP_Socket rudp_socket(false, 0, RUDP_MTU_DEFAULT, RUDP_SOCKET_TIMEOUT_DEFAULT, RUDP_MAX_RETRIES_DEFAULT);
+	// Create a new RUDP socket, used the default values for the MTU, timeout, max retries, and debug mode.
+	RUDP_Socket rudp_socket(false, 0, RUDP_MTU_DEFAULT, RUDP_SOCKET_TIMEOUT_DEFAULT, RUDP_MAX_RETRIES_DEFAULT, true);
 
 	// Generate the data.
 	std::cout << "Generating " << RUDP_FILE_SIZE << " bytes of random data..." << std::endl;
@@ -122,11 +123,25 @@ int main(int argc, char **argv)
 		try
 		{
 			char ready[] = "READY";
-			rudp_socket.send(ready, 5);
+			int sent = rudp_socket.send(ready, 5);
+
+			if (sent <= 0)
+			{
+				std::cerr << "Failed to send the READY message." << std::endl;
+				isOK = false;
+				break;
+			}
 			
 			gettimeofday(&start, NULL);
-			rudp_socket.send(data, RUDP_FILE_SIZE);
+			sent = rudp_socket.send(data, RUDP_FILE_SIZE);
 			gettimeofday(&end, NULL);
+
+			if (sent <= 0)
+			{
+				std::cerr << "Failed to send the data." << std::endl;
+				isOK = false;
+				break;
+			}
 
 			// Calculate the time it took to send the data.
 			double time_taken = (end.tv_sec - start.tv_sec) * 1000.0 + ((double)end.tv_usec - start.tv_usec) / 1000.0;
@@ -164,9 +179,16 @@ int main(int argc, char **argv)
 		}
 	}
 
-	std::cout << "Closing the connection..." << std::endl;
-	rudp_socket.disconnect();
-	std::cout << "Connection closed." << std::endl;
+	if (isOK)
+	{
+		std::cout << "Successfully sent all the data." << std::endl;
+		std::cout << "Closing the connection..." << std::endl;
+		rudp_socket.disconnect();
+	}
+
+	else
+		std::cerr << "An error occurred" << std::endl;
+
 	free(data);
 
 	return 0;
