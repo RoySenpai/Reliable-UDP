@@ -24,13 +24,6 @@
 
 #define RUDP_FILE_SIZE 10485760 // 10 MB
 
-#if defined(__linux__) || defined(__unix__) || defined(__APPLE__) // Linux, Unix, MacOS
-int system(const char *command)
-{
-	return 0;
-}
-#endif
-
 char *util_generate_random_data(unsigned int size)
 {
 	char *buffer = NULL;
@@ -62,7 +55,9 @@ int main(int argc, char **argv)
 	if (argc != 5)
 	{
 		fprintf(stderr, "Usage: %s -ip <IP> -p <PORT>\n", *argv);
+#if defined(_WIN32) || defined(_WIN64)
 		system("pause");
+#endif
 		return 1;
 	}
 
@@ -70,7 +65,9 @@ int main(int argc, char **argv)
 	if (strcmp(*(argv + 3), "-p") != 0)
 	{
 		fprintf(stderr, "Missing -p flag.\n");
+#if defined(_WIN32) || defined(_WIN64)
 		system("pause");
+#endif
 		return 1;
 	}
 
@@ -79,7 +76,9 @@ int main(int argc, char **argv)
 	if (port < 1 || port > 65535)
 	{
 		fprintf(stderr, "Invalid port number.\n");
+#if defined(_WIN32) || defined(_WIN64)
 		system("pause");
+#endif
 		return 1;
 	}
 
@@ -91,7 +90,9 @@ int main(int argc, char **argv)
 	if (client_socket == NULL)
 	{
 		fprintf(stderr, "rudp_socket() failed.\n");
+#if defined(_WIN32) || defined(_WIN64)
 		system("pause");
+#endif
 		return 1;
 	}
 
@@ -102,7 +103,9 @@ int main(int argc, char **argv)
 	if (data == NULL)
 	{
 		perror("util_generate_random_data()");
+#if defined(_WIN32) || defined(_WIN64)
 		system("pause");
+#endif
 		return 1;
 	}
 
@@ -115,7 +118,9 @@ int main(int argc, char **argv)
 	if (!ret)
 	{
 		free(data);
+#if defined(_WIN32) || defined(_WIN64)
 		system("pause");
+#endif
 		return 1;
 	}
 
@@ -185,7 +190,9 @@ int main(int argc, char **argv)
 	
 	free(client_socket);
 	free(data);
-	system("pause");
+#if defined(_WIN32) || defined(_WIN64)
+		system("pause");
+#endif
 
 	return 0;
 }

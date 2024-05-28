@@ -188,7 +188,11 @@ runcc: $(C_CLIENT_TARGET)
 ############
 
 $(TARGET): $(RUDP_LIB_OBJECTS)
+ifeq ($(PLATFORM), Windows)
 	$(CPPC) $(CPPFLAGS) $(LDFLAGS) $^ -o $@ -lws2_32
+else ifeq ($(PLATFORM), Linux)
+	$(CPPC) $(CPPFLAGS) $(LDFLAGS) $^ -o $@
+endif
 
 $(CPP_CLIENT_TARGET): $(CPP_CLIENT_OBJECTS) $(TARGET)
 	$(CPPC) $(CPPFLAGS) $< -o $@ $(LDFLAGS_EXTRA)

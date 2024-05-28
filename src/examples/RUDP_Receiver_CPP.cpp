@@ -25,13 +25,6 @@
 
 #define RUDP_FILE_SIZE 10485760 // 10 MB
 
-#if defined(__linux__) || defined(__unix__) || defined(__APPLE__) // Linux, Unix, MacOS
-int system(const char *command)
-{
-	return 0;
-}
-#endif
-
 int main(int argc, char **argv)
 {
 	int port = 0, times = 0, arrsize = 1;
@@ -42,14 +35,18 @@ int main(int argc, char **argv)
 	if (argc != 3)
 	{
 		std::cerr << "Usage: " << *argv << " -p <port>" << std::endl;
+#if defined(_WIN32) || defined(_WIN64)
 		system("pause");
+#endif
 		return 1;
 	}
 
 	else if (strcmp(*(argv + 1), "-p") != 0)
 	{
 		std::cerr << "Missing -p flag" << std::endl;
+#if defined(_WIN32) || defined(_WIN64)
 		system("pause");
+#endif
 		return 1;
 	}
 
@@ -58,7 +55,9 @@ int main(int argc, char **argv)
 	if (port < 1 || port > 65535)
 	{
 		std::cerr << "Invalid port number" << std::endl;
+#if defined(_WIN32) || defined(_WIN64)
 		system("pause");
+#endif
 		return 1;
 	}
 
@@ -68,7 +67,9 @@ int main(int argc, char **argv)
 	if (buffer == NULL || rtt == NULL)
 	{
 		perror("malloc");
+#if defined(_WIN32) || defined(_WIN64)
 		system("pause");
+#endif
 		return 1;
 	}
 
@@ -85,7 +86,9 @@ int main(int argc, char **argv)
 		std::cerr << e.what() << std::endl;
 		free(buffer);
 		free(rtt);
+#if defined(_WIN32) || defined(_WIN64)
 		system("pause");
+#endif
 		return 1;
 	}
 
@@ -112,7 +115,9 @@ int main(int argc, char **argv)
 			{
 				free(buffer);
 				free(rtt);
+#if defined(_WIN32) || defined(_WIN64)
 				system("pause");
+#endif
 				return 1;
 			}
 
@@ -129,7 +134,9 @@ int main(int argc, char **argv)
 				{
 					perror("realloc");
 					free(buffer);
+#if defined(_WIN32) || defined(_WIN64)
 					system("pause");
+#endif
 					return 1;
 				}
 			}
@@ -142,7 +149,9 @@ int main(int argc, char **argv)
 			std::cerr << e.what() << std::endl;
 			free(buffer);
 			free(rtt);
+#if defined(_WIN32) || defined(_WIN64)
 			system("pause");
+#endif
 			return 1;
 		}
 	}
@@ -168,7 +177,9 @@ int main(int argc, char **argv)
 		std::cout << i + 1 << ". " << *(rtt + i) << " ms" << std::endl;
 
 	free(rtt);
-	system("pause");
+#if defined(_WIN32) || defined(_WIN64)
+		system("pause");
+#endif
 
 	return 0;
 }
