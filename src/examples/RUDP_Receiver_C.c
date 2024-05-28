@@ -24,6 +24,13 @@
 
 #define RUDP_FILE_SIZE 10485760 // 10 MB
 
+#if defined(__linux__) || defined(__unix__) || defined(__APPLE__) // Linux, Unix, MacOS
+int system(const char *command)
+{
+	return 0;
+}
+#endif
+
 int main(int argc, char **argv)
 {
 	int port = 0, times = 0, arrsize = 1;
@@ -34,12 +41,14 @@ int main(int argc, char **argv)
 	if (argc != 3)
 	{
 		fprintf(stderr, "Usage: %s -p <port>\n", *argv);
+		system("pause");
 		return 1;
 	}
 
 	else if (strcmp(*(argv + 1), "-p") != 0)
 	{
 		fprintf(stderr, "Missing -p flag\n");
+		system("pause");
 		return 1;
 	}
 
@@ -48,6 +57,7 @@ int main(int argc, char **argv)
 	if (port < 1 || port > 65535)
 	{
 		fprintf(stderr, "Invalid port number\n");
+		system("pause");
 		return 1;
 	}
 
@@ -57,6 +67,7 @@ int main(int argc, char **argv)
 	if (buffer == NULL || rtt == NULL)
 	{
 		perror("malloc");
+		system("pause");
 		return 1;
 	}
 
@@ -66,6 +77,7 @@ int main(int argc, char **argv)
 	{
 		free(buffer);
 		free(rtt);
+		system("pause");
 		return 1;
 	}
 
@@ -75,6 +87,7 @@ int main(int argc, char **argv)
 	{
 		free(buffer);
 		free(rtt);
+		system("pause");
 		return 1;
 	}
 
@@ -100,6 +113,7 @@ int main(int argc, char **argv)
 		{
 			free(buffer);
 			free(rtt);
+			system("pause");
 			return 1;
 		}
 
@@ -116,6 +130,7 @@ int main(int argc, char **argv)
 			{
 				perror("realloc");
 				free(buffer);
+				system("pause");
 				return 1;
 			}
 		}
@@ -141,5 +156,8 @@ int main(int argc, char **argv)
 
 	free(server_socket);
 	free(rtt);
+
+	system("pause");
+	
 	return 0;
 }

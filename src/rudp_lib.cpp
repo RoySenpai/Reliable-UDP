@@ -18,26 +18,6 @@
 #include <iostream>
 #include <cstdlib>
 #include <stdexcept>
-
-// Based on the platform, include the appropriate headers. Future cross-platform support can be added here, currently only Unix-like is implemented.
-#if defined(_WIN32) || defined(_WIN64) // Windows NT (not Windows 9x)
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <windows.h>
-
-// Link with ws2_32.lib, as it is required for Winsock2
-#pragma comment(lib, "Ws2_32.lib")
-
-#elif (defined(__linux__) || defined(__unix__) || defined(__APPLE__)) // Linux / macOS / Unix / BSD / Solaris / AIX / etc.
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <poll.h>
-#include <unistd.h>
-
-#else // No appropriate platform detected, throw an error
-	#error "Unsupported platform detected, please refer to the documentation for more information."
-#endif
-
 #include <errno.h>
 #include <string.h>
 #include "include/RUDP_API_wrap.hpp"
@@ -64,10 +44,16 @@ void RUDP_Socket_p::_send_control_packet(uint8_t flags, uint32_t seq_num) {
 	packet.flags = flags;
 	packet.length = 0; // Control packets have no data, so the length is always 0. Changing this value will cause the packet to be invalid.
 	packet.seq_num = htonl(seq_num);
-	packet.checksum = htons(_calculate_checksum(&packet, sizeof(packet)));
+	packet.checksum = htons(RUDP_Socket_p::_calculate_checksum(&packet, sizeof(packet)));
 
+#if defined(_OPSYS_WINDOWS)
+	if (sendto(_socket_fd, (char *)&packet, sizeof(packet), 0, (struct sockaddr *)&_dest_addr, sizeof(_dest_addr)) == SOCKET_ERROR)
+		_print_socket_error("Failed to send a control packet", true);
+
+#elif defined(_OPSYS_UNIX)
 	if (sendto(_socket_fd, &packet, sizeof(packet), 0, (struct sockaddr *)&_dest_addr, sizeof(_dest_addr)) < 0)
 		throw std::runtime_error("Failed to send a control packet: " + std::string(strerror(errno)));
+#endif
 }
 
 int RUDP_Socket_p::_check_packet_validity(void *packet, uint32_t packet_size, uint8_t expected_flags) {
@@ -83,7 +69,7 @@ int RUDP_Socket_p::_check_packet_validity(void *packet, uint32_t packet_size, ui
 	uint16_t checksum = ntohs(header->checksum);
 	uint16_t length = ntohs(header->length);
 	header->checksum = 0;
-	header->checksum = _calculate_checksum(header, packet_size);
+	header->checksum = RUDP_Socket_p::_calculate_checksum(header, packet_size);
 
 	if (length != (packet_size - sizeof(RUDP_header)))
 	{
@@ -128,6 +114,17 @@ int RUDP_Socket_p::_check_packet_validity(void *packet, uint32_t packet_size, ui
 	return 1;
 }
 
+#if defined(_OPSYS_WINDOWS)
+void RUDP_Socket_p::_print_socket_error(std::string message, bool throw_exception) {
+	char err_buf[_ERROR_MSG_BUFFER_SIZE] = {0};
+	FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, NULL, WSAGetLastError(), 0, err_buf, sizeof(err_buf), NULL);
+	if (throw_exception)
+		throw std::runtime_error(message + ": " + err_buf);
+	else
+		std::cerr << message << ": " << err_buf << std::endl;
+}
+#endif
+
 RUDP_Socket_p::RUDP_Socket_p(bool isServer, uint16_t listen_port, uint16_t MTU, uint16_t timeout, uint16_t max_retries, bool debug_mode) {
 	_is_server = isServer;
 	_RUDP_MTU = MTU;
@@ -135,11 +132,26 @@ RUDP_Socket_p::RUDP_Socket_p(bool isServer, uint16_t listen_port, uint16_t MTU, 
 	_RUDP_MAX_RETRIES = max_retries;
 	_debug_mode = debug_mode;
 
+#ifdef _OPSYS_WINDOWS
+	// Initialize Winsock
+	WSADATA wsaData;
+	if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
+		_print_socket_error("Failed to initialize Winsock2", true);
+#endif
+
 	// Create a UDP socket
 	_socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
 
+#if defined(_OPSYS_WINDOWS)
+	if (_socket_fd == INVALID_SOCKET)
+	{
+		WSACleanup();
+		_print_socket_error("Failed to create a socket", true);
+	}
+#elif defined(_OPSYS_UNIX)
 	if (_socket_fd < 0)
 		throw std::runtime_error("Failed to create a socket: " + std::string(strerror(errno)));
+#endif
 
 	if (_is_server)
 	{
@@ -149,20 +161,27 @@ RUDP_Socket_p::RUDP_Socket_p(bool isServer, uint16_t listen_port, uint16_t MTU, 
 		server_addr.sin_addr.s_addr = INADDR_ANY;
 		server_addr.sin_port = htons(listen_port);
 
-		if (bind(_socket_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
-		{
-			close(_socket_fd);
-			throw std::runtime_error("Failed to bind the socket: " + std::string(strerror(errno)));
-		}
-
 		// Ensure that the port can be reused
 		int enable = 1;
 
-		if (setsockopt(_socket_fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0)
+#if defined(_OPSYS_WINDOWS)
+		if (bind(_socket_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == SOCKET_ERROR || 
+			setsockopt(_socket_fd, SOL_SOCKET, SO_REUSEADDR, (const char *)&enable, sizeof(int)) == SOCKET_ERROR)
+		{
+			closesocket(_socket_fd);
+			WSACleanup();
+			_print_socket_error("Socket error", true);
+		}
+
+#elif defined(_OPSYS_UNIX)
+		if (bind(_socket_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0 || 
+			setsockopt(_socket_fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0)
 		{
 			close(_socket_fd);
-			throw std::runtime_error("Failed to set the socket option SO_REUSEADDR: " + std::string(strerror(errno)));
+			throw std::runtime_error("Socket error: " + std::string(strerror(errno)));
 		}
+#endif
+
 	}
 }
 
@@ -170,8 +189,17 @@ RUDP_Socket_p::~RUDP_Socket_p() {
 	if (_is_connected)
 		disconnect();
 	
+#if defined(_OPSYS_WINDOWS)
+	if (_socket_fd != INVALID_SOCKET)
+	{
+		closesocket(_socket_fd);
+		WSACleanup();
+	}
+
+#elif defined(_OPSYS_UNIX)
 	if (_socket_fd >= 0)
 		close(_socket_fd);
+#endif
 }
 
 bool RUDP_Socket_p::connect(const char *dest_ip, uint16_t dest_port) {
@@ -199,26 +227,39 @@ bool RUDP_Socket_p::connect(const char *dest_ip, uint16_t dest_port) {
 			{.fd = _socket_fd, .events = POLLIN, .revents = 0 }
 		};
 
+#if defined(_OPSYS_WINDOWS)
+		int ret = WSAPoll(poll_fd, 1, _RUDP_SOCKET_TIMEOUT);
+
+		if (ret == SOCKET_ERROR)
+			_print_socket_error("Failed to poll the socket", true);
+
+#elif defined(_OPSYS_UNIX)
 		int ret = poll(poll_fd, 1, _RUDP_SOCKET_TIMEOUT);
 
 		if (ret < 0)
 			throw std::runtime_error("Failed to poll the socket: " + std::string(strerror(errno)));
+#endif
 
 		else if (ret == 0)
 		{
 			if (_debug_mode)
-			{
-				std::cerr << "Warning: Timeout occurred while waiting for a response packet." << std::endl;
-				std::cerr << "Retrying connection (" << num_of_tries + 1 << "/" << _RUDP_MAX_RETRIES << ")" << std::endl;
-			}
+				std::cerr << "Warning: Timeout occurred while waiting for a response packet. Retrying connection (" << num_of_tries + 1 << "/" << _RUDP_MAX_RETRIES << ")" << std::endl;
 			
 			continue;
 		}
 
+#if defined(_OPSYS_WINDOWS)
+		int bytes_recv = recvfrom(_socket_fd, (char *)buffer, sizeof(buffer), 0, NULL, NULL);
+
+		if (bytes_recv == SOCKET_ERROR)
+			_print_socket_error("Failed to receive a response packet", true);
+		
+#elif defined(_OPSYS_UNIX)
 		int bytes_recv = recvfrom(_socket_fd, buffer, sizeof(buffer), 0, NULL, NULL);
 
 		if (bytes_recv < 0)
-			throw std::runtime_error("Failed to receive a response packet");
+			throw std::runtime_error("Failed to receive a response packet" + std::string(strerror(errno)));
+#endif
 
 		int packet_validity = _check_packet_validity(buffer, bytes_recv, RUDP_FLAG_SYN | RUDP_FLAG_ACK);
 
@@ -262,11 +303,19 @@ bool RUDP_Socket_p::accept()
 	while (true)
 	{
 		// Receive a connection request packet. This is OK to wait indefinitely here.
+
+#if defined(_OPSYS_WINDOWS)
+		int bytes_recv = recvfrom(_socket_fd, (char *)buffer, sizeof(buffer), 0, (struct sockaddr *)&client_addr, &client_addr_len);
+
+		if (bytes_recv == SOCKET_ERROR)
+			_print_socket_error("Failed to receive a connection request packet", true);
+
+#elif defined(_OPSYS_UNIX)
 		int bytes_recv = recvfrom(_socket_fd, buffer, sizeof(buffer), 0, (struct sockaddr *)&client_addr, &client_addr_len);
 
-		// Check if the received packet is valid
 		if (bytes_recv < 0)
-			throw std::runtime_error("Failed to receive a connection request: " + std::string(strerror(errno)));
+			throw std::runtime_error("Failed to receive a connection request packet: " + std::string(strerror(errno)));
+#endif
 
 		int packet_validity = _check_packet_validity(buffer, bytes_recv, RUDP_FLAG_SYN);
 
@@ -304,10 +353,18 @@ int RUDP_Socket_p::recv(void *buffer, uint32_t buffer_size)
 	int dup_packets = 0; 
 
 	// Handle the first packet separately, we wait indefinitely for the first packet to arrive. Rest of the packets will be handled with a timeout.
-	int bytes_recv = recvfrom(_socket_fd, packet, sizeof(packet), 0, NULL, NULL);
+#if defined(_OPSYS_WINDOWS)
+		int bytes_recv = recvfrom(_socket_fd, (char *)packet, sizeof(packet), 0, NULL, NULL);
 
-	if (bytes_recv < 0)
-		throw std::runtime_error("Failed to receive the first packet: " + std::string(strerror(errno)));
+		if (bytes_recv == SOCKET_ERROR)
+			_print_socket_error("Failed to receive the first packet", true);
+
+#elif defined(_OPSYS_UNIX)
+		int bytes_recv = recvfrom(_socket_fd, packet, sizeof(packet), 0, NULL, NULL);
+
+		if (bytes_recv < 0)
+			throw std::runtime_error("Failed to receive the first packet: " + std::string(strerror(errno)));
+#endif
 
 	int packet_validity = _check_packet_validity(packet, bytes_recv, RUDP_FLAG_PSH);
 
@@ -317,7 +374,7 @@ int RUDP_Socket_p::recv(void *buffer, uint32_t buffer_size)
 	else if (packet_validity == -1)
 		return 0;
 
-	total_bytes += bytes_recv - sizeof(RUDP_header);
+	total_bytes += (bytes_recv - sizeof(RUDP_header));
 	total_packets++;
 	total_actual_bytes += bytes_recv;
 	total_actual_packets++;
@@ -351,26 +408,39 @@ int RUDP_Socket_p::recv(void *buffer, uint32_t buffer_size)
 				{.fd = _socket_fd, .events = POLLIN, .revents = 0 }
 			};
 
+#if defined(_OPSYS_WINDOWS)
+			int ret = WSAPoll(poll_fd, 1, _RUDP_SOCKET_TIMEOUT);
+
+			if (ret == SOCKET_ERROR)
+				_print_socket_error("Failed to poll the socket", true);
+
+#elif defined(_OPSYS_UNIX)
 			int ret = poll(poll_fd, 1, _RUDP_SOCKET_TIMEOUT);
 
 			if (ret < 0)
 				throw std::runtime_error("Failed to poll the socket: " + std::string(strerror(errno)));
+#endif
 
 			else if (ret == 0)
 			{
 				if (_debug_mode)
-				{
-					std::cerr << "Warning: Timeout occurred while waiting for a response packet." << std::endl;
-					std::cerr << "Retrying to receive the packet (" << num_of_tries + 1 << "/" << _RUDP_MAX_RETRIES << ")" << std::endl;
-				}
+					std::cerr << "Warning: Timeout occurred while waiting for a response packet. Retrying to receive the packet (" << num_of_tries + 1 << "/" << _RUDP_MAX_RETRIES << ")" << std::endl;
 
 				continue;
 			}
 
+#if defined(_OPSYS_WINDOWS)
+			bytes_recv = recvfrom(_socket_fd, (char *)packet, sizeof(packet), 0, NULL, NULL);
+
+			if (bytes_recv == SOCKET_ERROR)
+				_print_socket_error("Failed to receive a packet", true);
+
+#elif defined(_OPSYS_UNIX)
 			bytes_recv = recvfrom(_socket_fd, packet, sizeof(packet), 0, NULL, NULL);
 
 			if (bytes_recv < 0)
 				throw std::runtime_error("Failed to receive a packet: " + std::string(strerror(errno)));
+#endif
 
 			packet_validity = _check_packet_validity(packet, bytes_recv, RUDP_FLAG_PSH);
 
@@ -459,24 +529,29 @@ int RUDP_Socket_p::send(void *buffer, uint32_t buffer_size)
 		header->flags = (i == expected_packets - 1) ? (RUDP_FLAG_PSH | RUDP_FLAG_LAST) : RUDP_FLAG_PSH;
 		header->length = htons(packet_size);
 		header->seq_num = htonl(total_packets);
-		header->checksum = htons(_calculate_checksum(packet, sizeof(RUDP_header) + packet_size));
+		header->checksum = htons(RUDP_Socket_p::_calculate_checksum(packet, sizeof(RUDP_header) + packet_size));
 
 		// Wait for an ACK packet, up to _RUDP_MAX_RETRIES times
 		for (size_t num_of_tries = 0; num_of_tries <= _RUDP_MAX_RETRIES; num_of_tries++)
 		{
 			if (num_of_tries == _RUDP_MAX_RETRIES)
-				throw std::runtime_error("Failed to send the packet: maximum number of retries reached (" + std::to_string(_RUDP_MAX_RETRIES) + ")");
+				throw std::runtime_error("Failed to send the packet: maximum number of retries reached (" + std::to_string(_RUDP_MAX_RETRIES) + ").");
 
 			else if (num_of_tries > 0)
 				retry_packets++;
 
+#if defined(_OPSYS_WINDOWS)
+			int bytes_sent = sendto(_socket_fd, (char*)packet, sizeof(RUDP_header) + packet_size, 0, (struct sockaddr *)&_dest_addr, sizeof(_dest_addr));
+
+			if (bytes_sent == SOCKET_ERROR)
+				_print_socket_error("Failed to send a packet", true);
+
+#elif defined(_OPSYS_UNIX)
 			int bytes_sent = sendto(_socket_fd, packet, sizeof(RUDP_header) + packet_size, 0, (struct sockaddr *)&_dest_addr, sizeof(_dest_addr));
-		
+
 			if (bytes_sent < 0)
 				throw std::runtime_error("Failed to send a packet: " + std::string(strerror(errno)));
-
-			else if (bytes_sent != (((int)sizeof(RUDP_header)) + ((int)packet_size)))
-				throw std::runtime_error("Failed to send the entire packet: bytes sent: " + std::to_string(bytes_sent) + ", expected: " + std::to_string(sizeof(RUDP_header) + packet_size));
+#endif
 
 			total_actual_bytes += bytes_sent;
 			total_actual_packets++;
@@ -487,26 +562,39 @@ int RUDP_Socket_p::send(void *buffer, uint32_t buffer_size)
 				{.fd = _socket_fd, .events = POLLIN, .revents = 0 }
 			};
 
+#if defined(_OPSYS_WINDOWS)
+			int ret = WSAPoll(poll_fd, 1, _RUDP_SOCKET_TIMEOUT);
+
+			if (ret == SOCKET_ERROR)
+				_print_socket_error("Failed to poll the socket", true);
+
+#elif defined(_OPSYS_UNIX)
 			int ret = poll(poll_fd, 1, _RUDP_SOCKET_TIMEOUT);
 
 			if (ret < 0)
 				throw std::runtime_error("Failed to poll the socket: " + std::string(strerror(errno)));
+#endif
 
 			else if (ret == 0)
 			{
 				if (_debug_mode)
-				{
-					std::cerr << "Warning: Timeout occurred while waiting for a response packet." << std::endl;
-					std::cerr << "Retrying to send the packet (" << num_of_tries + 1 << "/" << _RUDP_MAX_RETRIES << ")" << std::endl;
-				}
+					std::cerr << "Warning: Timeout occurred while waiting for a response packet. Retrying to send the packet (" << num_of_tries + 1 << "/" << _RUDP_MAX_RETRIES << ")" << std::endl;
 
 				continue;
 			}
 
+#if defined(_OPSYS_WINDOWS)
+			int bytes_recv = recvfrom(_socket_fd, (char*)ack_buffer, sizeof(ack_buffer), 0, NULL, NULL);
+
+			if (bytes_recv == SOCKET_ERROR)
+				_print_socket_error("Failed to receive an ACK packet", true);
+
+#elif defined(_OPSYS_UNIX)
 			int bytes_recv = recvfrom(_socket_fd, ack_buffer, sizeof(ack_buffer), 0, NULL, NULL);
 
 			if (bytes_recv < 0)
 				throw std::runtime_error("Failed to receive an ACK packet: " + std::string(strerror(errno)));
+#endif
 
 			int packet_validity = _check_packet_validity(ack_buffer, bytes_recv, RUDP_FLAG_ACK);
 
@@ -560,13 +648,19 @@ bool RUDP_Socket_p::disconnect()
 
 	RUDP_header fin_packet;
 	fin_packet.flags = RUDP_FLAG_FIN;
-	fin_packet.checksum = htons(_calculate_checksum(&fin_packet, sizeof(fin_packet)));
+	fin_packet.checksum = htons(RUDP_Socket_p::_calculate_checksum(&fin_packet, sizeof(fin_packet)));
 
 	// Try to disconnect from the server, up to _RUDP_MAX_RETRIES times
 	for (size_t num_of_tries = 0; num_of_tries < _RUDP_MAX_RETRIES; num_of_tries++)
 	{
+#if defined(_OPSYS_WINDOWS)
+		if (sendto(_socket_fd, (char *)&fin_packet, sizeof(fin_packet), 0, (struct sockaddr *)&_dest_addr, sizeof(_dest_addr)) == SOCKET_ERROR)
+			_print_socket_error("Failed to send a disconnection request", true);
+		
+#elif defined(_OPSYS_UNIX)
 		if (sendto(_socket_fd, &fin_packet, sizeof(fin_packet), 0, (struct sockaddr *)&_dest_addr, sizeof(_dest_addr)) < 0)
 			throw std::runtime_error("Failed to send a disconnection request: " + std::string(strerror(errno)));
+#endif
 
 		memset(buffer, 0, sizeof(buffer));
 
@@ -574,37 +668,41 @@ bool RUDP_Socket_p::disconnect()
 			{.fd = _socket_fd, .events = POLLIN, .revents = 0 }
 		};
 
+#if defined(_OPSYS_WINDOWS)
+		int ret = WSAPoll(poll_fd, 1, _RUDP_SOCKET_TIMEOUT);
+
+		if (ret == SOCKET_ERROR)
+			_print_socket_error("Failed to poll the socket", true);
+
+#elif defined(_OPSYS_UNIX)
 		int ret = poll(poll_fd, 1, _RUDP_SOCKET_TIMEOUT);
 
 		if (ret < 0)
 			throw std::runtime_error("Failed to poll the socket: " + std::string(strerror(errno)));
+#endif
 
 		else if (ret == 0)
 		{
 			if (_debug_mode)
 			{
-				std::cerr << "Warning: Timeout occurred while waiting for a response packet." << std::endl;
-				std::cerr << "Retrying disconnection (" << num_of_tries + 1 << "/" << _RUDP_MAX_RETRIES << ")" << std::endl;
+				std::cerr << "Warning: Timeout occurred while waiting for a response packet. Retrying disconnection (" << num_of_tries + 1 << "/" << _RUDP_MAX_RETRIES << ")" << std::endl;
 			}
 
 			continue;
 		}
 
+#if defined(_OPSYS_WINDOWS)
+		int bytes_recv = recvfrom(_socket_fd, (char *)buffer, sizeof(buffer), 0, NULL, NULL);
+
+		if (bytes_recv == SOCKET_ERROR)
+			_print_socket_error("Failed to receive a response packet", true);
+
+#elif defined(_OPSYS_UNIX)
 		int bytes_recv = recvfrom(_socket_fd, buffer, sizeof(buffer), 0, NULL, NULL);
 
 		if (bytes_recv < 0)
 			throw std::runtime_error("Failed to receive a response packet: " + std::string(strerror(errno)));
-
-		else if (bytes_recv != sizeof(RUDP_header))
-		{
-			if (_debug_mode)
-			{
-				std::cerr << "Warning: Received an incomplete response packet, ignoring it." << std::endl;
-				std::cerr << "Retrying disconnection (" << num_of_tries + 1 << "/" << _RUDP_MAX_RETRIES << ")" << std::endl;
-			}
-
-			continue;
-		}
+#endif
 
 		int packet_validity = _check_packet_validity(buffer, bytes_recv, RUDP_FLAG_FIN | RUDP_FLAG_ACK);
 
@@ -612,8 +710,7 @@ bool RUDP_Socket_p::disconnect()
 		{
 			if (_debug_mode)
 			{
-				std::cerr << "Warning: Received an invalid response packet, ignoring it." << std::endl;
-				std::cerr << "Retrying disconnection (" << num_of_tries + 1 << "/" << _RUDP_MAX_RETRIES << ")" << std::endl;
+				std::cerr << "Warning: Received an invalid response packet, ignoring it. Retrying disconnection (" << num_of_tries + 1 << "/" << _RUDP_MAX_RETRIES << ")" << std::endl;
 			}
 
 			continue;

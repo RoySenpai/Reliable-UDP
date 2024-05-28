@@ -17,7 +17,31 @@
 
 #pragma once
 #include <cstdint>
+#include <string>
+
+#if defined(_WIN32) || defined(_WIN64) // Windows NT (not Windows 9x)
+
+#define _OPSYS_WINDOWS
+
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+
+// Error message buffer size for Winsock2
+#define _ERROR_MSG_BUFFER_SIZE 1024
+
+#elif defined(__linux__) || defined(__unix__) || defined(__APPLE__) // Linux, Unix, MacOS
+#define _OPSYS_UNIX
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <poll.h>
+#include <unistd.h>
 #include <netinet/in.h>
+
+#else // No appropriate platform detected, throw an error
+	#error "Unsupported platform detected, please refer to the documentation for more information."
+#endif
+
 
 /*
  * @brief The MTU (Maximum Transmission Unit) of the network, default is 1458 bytes.
@@ -121,7 +145,11 @@ class RUDP_Socket_p
 		/*
 		* @brief UDP socket file descriptor
 		*/
+#if defined(_WIN32) || defined(_WIN64) // Windows
+		SOCKET _socket_fd = INVALID_SOCKET;
+#elif defined(__linux__) || defined(__unix__) || defined(__APPLE__) // Linux, Unix, MacOS
 		int _socket_fd = -1;
+#endif
 
 		/*
 		* @brief True if the RUDP socket acts like a server, false for client.
@@ -139,10 +167,16 @@ class RUDP_Socket_p
 		bool _debug_mode = false;
 
 		/*
-		* @brief Destination address.
+		* @brief Destination address (IPv4).
 		* @note Client fills it when it connects via rudp_connect(), server fills it when it accepts a connection via rudp_accept().
 		*/
 		struct sockaddr_in _dest_addr;
+
+		/*
+		 * @brief Destination address (IPv6).
+		 * @note Client fills it when it connects via rudp_connect(), server fills it when it accepts a connection via rudp_accept().
+		*/
+		struct sockaddr_in6 _dest_addr6;
 
 		/*
 		 * @brief The MTU (Maximum Transmission Unit) of the network.
@@ -167,7 +201,18 @@ class RUDP_Socket_p
 		* @return The checksum itself as 16 bit unsigned number.
 		* @note This is an internal method, its not exposed to the user.
 		*/
-		uint16_t _calculate_checksum(void *data, uint32_t data_size);
+		static uint16_t _calculate_checksum(void *data, uint32_t data_size);
+
+		/*
+		* @brief Prints a socket error message (Winsock2).
+		* @param message The message to be printed.
+		* @param throw_exception True to throw an exception, false otherwise.
+		* @note This is an internal method, its not exposed to the user.
+		*/
+
+#if defined(_OPSYS_WINDOWS)
+		void _print_socket_error(std::string message, bool throw_exception = false);
+#endif
 
 		/*
 		* @brief Sends a control packet (SYN, ACK, FIN) to the connected peer.

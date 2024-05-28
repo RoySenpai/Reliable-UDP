@@ -24,6 +24,13 @@
 
 #define RUDP_FILE_SIZE 10485760 // 10 MB
 
+#if defined(__linux__) || defined(__unix__) || defined(__APPLE__) // Linux, Unix, MacOS
+int system(const char *command)
+{
+	return 0;
+}
+#endif
+
 char *util_generate_random_data(unsigned int size)
 {
 	char *buffer = NULL;
@@ -55,6 +62,7 @@ int main(int argc, char **argv)
 	if (argc != 5)
 	{
 		std::cerr << "Usage: " << *argv << " -ip <IP> -p <PORT>" << std::endl;
+		system("pause");
 		return 1;
 	}
 
@@ -62,6 +70,7 @@ int main(int argc, char **argv)
 	if (strcmp(*(argv + 3), "-p") != 0)
 	{
 		std::cerr << "Missing -p argument." << std::endl;
+		system("pause");
 		return 1;
 	}
 
@@ -70,6 +79,7 @@ int main(int argc, char **argv)
 	if (port < 1 || port > 65535)
 	{
 		std::cerr << "Invalid port number." << std::endl;
+		system("pause");
 		return 1;
 	}
 
@@ -85,6 +95,7 @@ int main(int argc, char **argv)
 	if (data == NULL)
 	{
 		perror("util_generate_random_data()");
+		system("pause");
 		return 1;
 	}
 
@@ -103,12 +114,14 @@ int main(int argc, char **argv)
 	{
 		std::cerr << e.what() << std::endl;
 		free(data);
+		system("pause");
 		return 1;
 	}
 
 	if (!ret)
 	{
 		free(data);
+		system("pause");
 		return 1;
 	}
 
@@ -175,6 +188,7 @@ int main(int argc, char **argv)
 		{
 			std::cerr << e.what() << std::endl;
 			free(data);
+			system("pause");
 			return 1;
 		}
 	}
@@ -190,6 +204,7 @@ int main(int argc, char **argv)
 		std::cerr << "An error occurred" << std::endl;
 
 	free(data);
+	system("pause");
 
 	return 0;
 }
