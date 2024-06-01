@@ -39,19 +39,44 @@ uint16_t RUDP_Socket_p::_calculate_checksum(void *data, uint32_t data_size) {
 }
 
 void RUDP_Socket_p::_send_control_packet(uint8_t flags, uint32_t seq_num) {
-	RUDP_header packet;
+	uint8_t packet[_RUDP_MTU] = {0};
+	RUDP_header header;
 
-	packet.flags = flags;
-	packet.length = 0; // Control packets have no data, so the length is always 0. Changing this value will cause the packet to be invalid.
-	packet.seq_num = htonl(seq_num);
-	packet.checksum = htons(RUDP_Socket_p::_calculate_checksum(&packet, sizeof(packet)));
+	header.flags = flags;
+	header.seq_num = htonl(seq_num);
+
+	if ((flags & RUDP_FLAG_SYN) != RUDP_FLAG_SYN)
+	{
+		header.length = 0; // Control packets have no data, so the length is always 0. Changing this value will cause the packet to be invalid.
+		header.checksum = htons(RUDP_Socket_p::_calculate_checksum(&header, sizeof(header)));
+	}
+
+	// SYN packets have additional information, so we need to include it in the packet.
+	else
+	{
+		header.length = htons(sizeof(RUDP_SYN_packet));
+
+		RUDP_SYN_packet syn_packet = {
+			.MTU = htons(_RUDP_MTU),
+			.timeout = htons(_RUDP_SOCKET_TIMEOUT),
+			.max_retries = htons(_RUDP_MAX_RETRIES),
+			.debug_mode = htons(_debug_mode)
+		};
+
+		memcpy(packet + sizeof(header), &syn_packet, sizeof(RUDP_SYN_packet));
+		memcpy(packet, &header, sizeof(header));
+
+		header.checksum = htons(RUDP_Socket_p::_calculate_checksum(&packet, sizeof(header) + sizeof(RUDP_SYN_packet)));
+	}
+
+	memcpy(packet, &header, sizeof(header));
 
 #if defined(_OPSYS_WINDOWS)
-	if (sendto(_socket_fd, (char *)&packet, sizeof(packet), 0, (struct sockaddr *)&_dest_addr, sizeof(_dest_addr)) == SOCKET_ERROR)
+	if (sendto(_socket_fd, (char *)&packet, (ntohs(header.length) + sizeof(header)), 0, (struct sockaddr *)&_dest_addr, sizeof(_dest_addr)) == SOCKET_ERROR)
 		_print_socket_error("Failed to send a control packet", true);
 
 #elif defined(_OPSYS_UNIX)
-	if (sendto(_socket_fd, &packet, sizeof(packet), 0, (struct sockaddr *)&_dest_addr, sizeof(_dest_addr)) < 0)
+	if (sendto(_socket_fd, &packet, (ntohs(header.length) + sizeof(header)), 0, (struct sockaddr *)&_dest_addr, sizeof(_dest_addr)) < 0)
 		throw std::runtime_error("Failed to send a control packet: " + std::string(strerror(errno)));
 #endif
 }
@@ -60,7 +85,7 @@ int RUDP_Socket_p::_check_packet_validity(void *packet, uint32_t packet_size, ui
 	if (packet_size < sizeof(RUDP_header))
 	{
 		if (_debug_mode)
-			std::cerr << "Packet is too small: " << packet_size << " bytes, while the minimum size is " << sizeof(RUDP_header) << " bytes." << std::endl;
+			std::cerr << "Error: Packet is too small: " << packet_size << " bytes, while the minimum size is " << sizeof(RUDP_header) << " bytes." << std::endl;
 
 		return 0;
 	}
@@ -74,7 +99,7 @@ int RUDP_Socket_p::_check_packet_validity(void *packet, uint32_t packet_size, ui
 	if (length != (packet_size - sizeof(RUDP_header)))
 	{
 		if (_debug_mode)
-			std::cerr << "Length mismatch: expected " << (packet_size - sizeof(RUDP_header)) << " bytes, got " << length << " bytes." << std::endl;
+			std::cerr << "Error: Length mismatch: expected " << (packet_size - sizeof(RUDP_header)) << " bytes, got " << length << " bytes." << std::endl;
 		
 		return 0;
 	}
@@ -82,7 +107,7 @@ int RUDP_Socket_p::_check_packet_validity(void *packet, uint32_t packet_size, ui
 	if (checksum != header->checksum)
 	{
 		if (_debug_mode)
-			std::cerr << std::hex << "Checksum mismatch: expected 0x" << (int)checksum << ", got 0x" << (int)header->checksum << std::dec << std::endl;
+			std::cerr << std::hex << "Error: Checksum mismatch: expected 0x" << (int)checksum << ", got 0x" << (int)header->checksum << std::dec << std::endl;
 		
 		return 0;
 	}
@@ -91,7 +116,7 @@ int RUDP_Socket_p::_check_packet_validity(void *packet, uint32_t packet_size, ui
 	{
 		if (!_is_connected)
 		{
-			std::cerr << "Received a disconnection request, but there is no active connection." << std::endl;
+			std::cerr << "Error: Received a disconnection request, but there is no active connection." << std::endl;
 			return 0;
 		}
 
@@ -117,7 +142,8 @@ int RUDP_Socket_p::_check_packet_validity(void *packet, uint32_t packet_size, ui
 #if defined(_OPSYS_WINDOWS)
 void RUDP_Socket_p::_print_socket_error(std::string message, bool throw_exception) {
 	char err_buf[_ERROR_MSG_BUFFER_SIZE] = {0};
-	FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, NULL, WSAGetLastError(), 0, err_buf, sizeof(err_buf), NULL);
+	int last_error = WSAGetLastError();
+	FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, NULL, last_error, 0, err_buf, sizeof(err_buf), NULL);
 	if (throw_exception)
 		throw std::runtime_error(message + ": " + err_buf);
 	else
@@ -132,6 +158,15 @@ RUDP_Socket_p::RUDP_Socket_p(bool isServer, uint16_t listen_port, uint16_t MTU, 
 	_RUDP_MAX_RETRIES = max_retries;
 	_debug_mode = debug_mode;
 
+	if (_RUDP_MTU < (sizeof(RUDP_header) + 8)) // MTU must be at least the size of the header + 8 bytes of data, otherwise the packet will be invalid.
+		throw std::runtime_error("Invalid MTU: " + std::to_string(_RUDP_MTU) + " bytes, the minimum MTU is " + std::to_string(sizeof(RUDP_header) + 8) + " bytes. Please reajust the MTU value.");
+
+	if (_RUDP_SOCKET_TIMEOUT < 10) // The minimum timeout is 10 millisecond. Anything below that is considered invalid, as it may cause issues with the socket.
+		throw std::runtime_error("Invalid timeout: " + std::to_string(_RUDP_SOCKET_TIMEOUT) + " milliseconds, the minimum timeout is 10 millisecond.");
+
+	if (_RUDP_MAX_RETRIES == 0) // The minimum number of retries is 1, as the first attempt is not considered a retry.
+		throw std::runtime_error("Invalid maximum number of retries: " + std::to_string(_RUDP_MAX_RETRIES) + ", the minimum number of retries is 1.");
+
 #ifdef _OPSYS_WINDOWS
 	// Initialize Winsock
 	WSADATA wsaData;
@@ -144,10 +179,8 @@ RUDP_Socket_p::RUDP_Socket_p(bool isServer, uint16_t listen_port, uint16_t MTU, 
 
 #if defined(_OPSYS_WINDOWS)
 	if (_socket_fd == INVALID_SOCKET)
-	{
-		WSACleanup();
 		_print_socket_error("Failed to create a socket", true);
-	}
+	
 #elif defined(_OPSYS_UNIX)
 	if (_socket_fd < 0)
 		throw std::runtime_error("Failed to create a socket: " + std::string(strerror(errno)));
@@ -161,25 +194,18 @@ RUDP_Socket_p::RUDP_Socket_p(bool isServer, uint16_t listen_port, uint16_t MTU, 
 		server_addr.sin_addr.s_addr = INADDR_ANY;
 		server_addr.sin_port = htons(listen_port);
 
-		// Ensure that the port can be reused
+		// Ensure that the port can be reused (stupid but necessary).
 		int enable = 1;
 
 #if defined(_OPSYS_WINDOWS)
 		if (bind(_socket_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == SOCKET_ERROR || 
 			setsockopt(_socket_fd, SOL_SOCKET, SO_REUSEADDR, (const char *)&enable, sizeof(int)) == SOCKET_ERROR)
-		{
-			closesocket(_socket_fd);
-			WSACleanup();
 			_print_socket_error("Socket error", true);
-		}
 
 #elif defined(_OPSYS_UNIX)
 		if (bind(_socket_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0 || 
 			setsockopt(_socket_fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0)
-		{
-			close(_socket_fd);
 			throw std::runtime_error("Socket error: " + std::string(strerror(errno)));
-		}
 #endif
 
 	}
@@ -276,6 +302,21 @@ bool RUDP_Socket_p::connect(const char *dest_ip, uint16_t dest_port) {
 			default:
 				_is_connected = true;
 				std::cout << "Connection established with " << dest_ip << ":" << dest_port << std::endl;
+
+				if (_debug_mode)
+				{
+					// Print the connection information
+					RUDP_SYN_packet *syn_packet = (RUDP_SYN_packet *)(buffer + sizeof(RUDP_header));
+					std::cout << "Peer connection information:" << std::endl;
+					std::cout << "\tMTU: " << ntohs(syn_packet->MTU) << " bytes" << std::endl;
+					std::cout << "\tTimeout: " << ntohs(syn_packet->timeout) << " milliseconds" << std::endl;
+					std::cout << "\tMaximum number of retries: " << ntohs(syn_packet->max_retries) << std::endl;
+					std::cout << "\tDebug mode: " << ntohs(syn_packet->debug_mode) << std::endl;
+
+					if (ntohs(syn_packet->MTU) != _RUDP_MTU)
+						std::cerr << "Warning: MTU mismatch: configured " << _RUDP_MTU << " bytes, peer's MTU is " << ntohs(syn_packet->MTU) << " bytes." << std::endl;
+				}
+
 				return true;
 		}
 	}
@@ -326,6 +367,21 @@ bool RUDP_Socket_p::accept()
 			return false;
 
 		_is_connected = true;
+
+		if (_debug_mode)
+		{
+			// Print the connection information
+			RUDP_SYN_packet *syn_packet = (RUDP_SYN_packet *)(buffer + sizeof(RUDP_header));
+			std::cout << "Connection request received from " << inet_ntoa(client_addr.sin_addr) << ":" << ntohs(client_addr.sin_port) << std::endl;
+			std::cout << "Client connection information:" << std::endl;
+			std::cout << "\tMTU: " << ntohs(syn_packet->MTU) << " bytes" << std::endl;
+			std::cout << "\tTimeout: " << ntohs(syn_packet->timeout) << " milliseconds" << std::endl;
+			std::cout << "\tMaximum number of retries: " << ntohs(syn_packet->max_retries) << std::endl;
+			std::cout << "\tDebug mode: " << ntohs(syn_packet->debug_mode) << std::endl;
+
+			if (ntohs(syn_packet->MTU) != _RUDP_MTU)
+				std::cerr << "Warning: MTU mismatch: configured to " << _RUDP_MTU << " bytes, client's MTU is " << ntohs(syn_packet->MTU) << " bytes." << std::endl;
+		}
 		
 		memcpy(&_dest_addr, &client_addr, client_addr_len);
 		_send_control_packet(RUDP_FLAG_SYN | RUDP_FLAG_ACK, 0);
@@ -341,6 +397,9 @@ int RUDP_Socket_p::recv(void *buffer, uint32_t buffer_size)
 {
 	if (!_is_connected)
 		throw std::runtime_error("There is no active connection to receive data from.");
+
+	if (buffer == nullptr)
+		throw std::runtime_error("Buffer is null.");
 
 	uint8_t packet[_RUDP_MTU] = {0};
 
@@ -493,8 +552,13 @@ int RUDP_Socket_p::recv(void *buffer, uint32_t buffer_size)
 			break;
 		}
 		
-		if (total_bytes >= ((int32_t)buffer_size))
+		if (total_bytes > ((int32_t)buffer_size))
+		{
+			if (_debug_mode)
+				std::cout << "Warning: Buffer overflow detected, stopping the reception." << std::endl;
+			
 			break;
+		}
 	}
 
 	if (_debug_mode)
@@ -508,6 +572,12 @@ int RUDP_Socket_p::recv(void *buffer, uint32_t buffer_size)
 
 int RUDP_Socket_p::send(void *buffer, uint32_t buffer_size)
 {
+	if (!_is_connected)
+		throw std::runtime_error("There is no active connection to send data to.");
+
+	if (buffer == nullptr)
+		throw std::runtime_error("Buffer is null.");
+	
 	uint8_t *buffer_ptr = (uint8_t *)buffer;
 	uint32_t total_packets = 0;
 	uint32_t total_actual_packets = 0;
@@ -518,6 +588,9 @@ int RUDP_Socket_p::send(void *buffer, uint32_t buffer_size)
 	int retry_packets = 0;
 
 	uint8_t packet[_RUDP_MTU] = {0};
+
+	if (_debug_mode)
+		std::cout << "Sending " << buffer_size << " bytes over " << expected_packets << " packets." << std::endl;
 
 	for (uint32_t i = 0; i < expected_packets; i++)
 	{
@@ -646,22 +719,10 @@ bool RUDP_Socket_p::disconnect()
 
 	uint8_t buffer[_RUDP_MTU] = {0};
 
-	RUDP_header fin_packet;
-	fin_packet.flags = RUDP_FLAG_FIN;
-	fin_packet.checksum = htons(RUDP_Socket_p::_calculate_checksum(&fin_packet, sizeof(fin_packet)));
-
 	// Try to disconnect from the server, up to _RUDP_MAX_RETRIES times
 	for (size_t num_of_tries = 0; num_of_tries < _RUDP_MAX_RETRIES; num_of_tries++)
 	{
-#if defined(_OPSYS_WINDOWS)
-		if (sendto(_socket_fd, (char *)&fin_packet, sizeof(fin_packet), 0, (struct sockaddr *)&_dest_addr, sizeof(_dest_addr)) == SOCKET_ERROR)
-			_print_socket_error("Failed to send a disconnection request", true);
-		
-#elif defined(_OPSYS_UNIX)
-		if (sendto(_socket_fd, &fin_packet, sizeof(fin_packet), 0, (struct sockaddr *)&_dest_addr, sizeof(_dest_addr)) < 0)
-			throw std::runtime_error("Failed to send a disconnection request: " + std::string(strerror(errno)));
-#endif
-
+		_send_control_packet(RUDP_FLAG_FIN, 0);
 		memset(buffer, 0, sizeof(buffer));
 
 		pollfd poll_fd[1] = {

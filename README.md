@@ -25,6 +25,8 @@ For the C version, the methods are the same, but they are prefixed with `rudp_` 
 
 Note that `RUDP_API.h` is the header file for the C version of the library, and `RUDP_API.hpp` is the header file for the C++ version of the library.
 
+**Note**: In C, instead of using `free()`, you can use the `rudp_socket_free()` function to free the memory allocated for the socket.
+
 #### The RUDP header
 
 The RUDP header is a simple struct that is added to the beginning of each packet to keep track of the sequence number, type of packet, length of the payload, and a checksum for error detection. The header is defined as follows:
@@ -53,10 +55,24 @@ The RUDP socket has a few settings that can be adjusted to change the behavior o
 | `max_retries` | `uint16_t` | Maximum number of retries before giving up on sending a packet.                                                |
 | `debug_mode` |   `bool`   | Whether to print debug messages to the console. In C, exceptions will always print regardless of this setting. |
 
+Those settings are shared between the peers when a connection is established (in the handshake process), and they can be used to adjust the behavior of the socket.
+
+
+#### The RUDP socket communication process
+The RUDP socket uses a simple Stop-and-Wait protocol to send and receive data. The communication process is as follows:
+- The client sends a `SYN` packet to the server to initiate the connection. The packet contains the client's settings (MTU, timeout, max_retries and debug_mode).
+- The server receives the `SYN` packet, copies the client's data, and sends a `SYN-ACK` packet back to the client. The packet contains the server's settings (MTU, timeout, max_retries and debug_mode).
+- The peers now have each other's settings, and the connection is established. The client can now send data to the server, and the server can send data to the client.
+- Each data send is done by automatically splitting the data into packets of the MTU size, and sending them one by one using the `PSH` flag. The sender waits for an acknowledgment from the receiver before sending the next packet.
+- When the last packet of the current message is sent, the sender turns on the `LAST` flag in the packet to indicate that this is the last packet of the message.
+- When the receiver receives the last packet of the message, it sends an acknowledgment back to the sender, and the sender can now send the next message.
+- When the sender wants to close the connection, it sends a `FIN` packet to the receiver to indicate that it wants to close the connection.
+- The receiver receives the `FIN` packet, sends a `FIN-ACK` packet back to the sender, and closes the connection. It does not accept any more data from the sender and will ignore any packets received after the `FIN` packet.
+
 ## Requirements
 
 - A C++ compiler that supports C++17 or later (GCC, Clang, etc.).
-- A Unix-like operating system (Linux, MacOS, etc.).
+- A Unix-like operating system (Linux, MacOS, etc.) or Windows.
 - Root/sudo privileges to install the library (optional, but recommended).
 
 ## How to build
@@ -67,11 +83,16 @@ The RUDP socket has a few settings that can be adjusted to change the behavior o
 git clone https://github.com/RoySenpai/Reliable-UDP.git
 ```
 
-2. Build and install the library (requires root/sudo privileges):
+2. Build and install the library (requires root/sudo privileges for linux systems, but you can skip this step if you only want to use the library in your project without installing it system-wide by using `make lib` instead of `make install`):
 
 ```bash
 cd Reliable-UDP
-make install
+
+# Run this command if you want to build the library in release mode
+make DEBUG=0 install
+
+# Run this command if you want to build the library in debug mode (symbols and additional debug information)
+make DEBUG=1 install
 ```
 
 3. Build the example programs (only if you want to run the examples):
@@ -148,8 +169,13 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 
 ## Future work
 
-- [X] Add Windows support.
+- [X] ~~Add Windows support.~~ (Done in v1.1)
 - [ ] Add support for IPv6 and other network protocols.
 - [ ] Add support for multiple connections at the same time.
 - [ ] Implement congestion control and flow control to make the library suitable for high-speed networks.
 - [ ] Improve the error detection and correction mechanisms.
+- [ ] Add support for more systems.
+
+## Bugs and feature requests
+
+Feel free to open an issue if you find a bug or have a feature request. Pull requests are also welcome.

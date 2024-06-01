@@ -88,6 +88,7 @@ int main(int argc, char **argv)
 
 	if (!rudp_accept(server_socket))
 	{
+		rudp_socket_free(&server_socket);
 		free(buffer);
 		free(rtt);
 #if defined(_WIN32) || defined(_WIN64)
@@ -104,7 +105,7 @@ int main(int argc, char **argv)
 		fprintf(stdout, "Waiting for client data...\n");
 
 		// Expecting "READY" message from the client, if not received, break the loop.
-		if (rudp_recv(server_socket, buffer, 5) == 0)
+		if (rudp_recv(server_socket, buffer, 5) <= 0)
 			break;
 
 		gettimeofday(&start, NULL);
@@ -116,6 +117,7 @@ int main(int argc, char **argv)
 
 		else if (bytes_received < 0)
 		{
+			rudp_socket_free(&server_socket);
 			free(buffer);
 			free(rtt);
 #if defined(_WIN32) || defined(_WIN64)
@@ -136,6 +138,7 @@ int main(int argc, char **argv)
 			if (rtt == NULL)
 			{
 				perror("realloc");
+				rudp_socket_free(&server_socket);
 				free(buffer);
 #if defined(_WIN32) || defined(_WIN64)
 				system("pause");
@@ -163,7 +166,7 @@ int main(int argc, char **argv)
 	for (int i = 0; i < times; i++)
 		fprintf(stdout, "%d. %.2f ms\n", i + 1, *(rtt + i));
 
-	free(server_socket);
+	rudp_socket_free(&server_socket);
 	free(rtt);
 
 #if defined(_WIN32) || defined(_WIN64)

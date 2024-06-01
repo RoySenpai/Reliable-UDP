@@ -100,6 +100,15 @@ extern "C"
 	 */
 	bool rudp_disconnect(RUDP_socket socket);
 
+	/*
+	 * @brief Free the RUDP socket and release the resources.
+	 * @param socket A pointer to the RUDP socket to free.
+	 * @note This function should be called after the socket is no longer needed.
+	 * @attention This function resets the pointer back to NULL, so no further operations can be performed on the socket.
+	 * @return None.
+	 */
+	void rudp_socket_free(RUDP_socket *socket);
+
 #ifdef __cplusplus
 }
 #endif // __cplusplus

@@ -103,6 +103,7 @@ int main(int argc, char **argv)
 	if (data == NULL)
 	{
 		perror("util_generate_random_data()");
+		rudp_socket_free(&client_socket);
 #if defined(_WIN32) || defined(_WIN64)
 		system("pause");
 #endif
@@ -117,6 +118,7 @@ int main(int argc, char **argv)
 
 	if (!ret)
 	{
+		rudp_socket_free(&client_socket);
 		free(data);
 #if defined(_WIN32) || defined(_WIN64)
 		system("pause");
@@ -188,7 +190,7 @@ int main(int argc, char **argv)
 	else
 		fprintf(stderr, "An error occurred\n");
 	
-	free(client_socket);
+	rudp_socket_free(&client_socket);
 	free(data);
 #if defined(_WIN32) || defined(_WIN64)
 		system("pause");

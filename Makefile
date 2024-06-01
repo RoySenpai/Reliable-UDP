@@ -1,6 +1,13 @@
+###############################################
+# Makefile for the RUDP library and examples. #
+# Made by: Roy Simanovich					  #
+###############################################
+
+# Debug or release mode (1 for debug, 0 for release).
+DEBUG ?= 0
+
 # Constants for the source and binary paths.
 SOURCE_PATH = src
-BIN_PATH = bin
 
 # Use the gcc compiler for C files.
 CC = gcc
@@ -8,11 +15,23 @@ CC = gcc
 # Use the g++ compiler for C++ files.
 CPPC = g++
 
-# Flags for the compiler (C).
-CFLAGS = -Wall -Wextra -Werror -std=gnu11 -g -I$(SOURCE_PATH)
+ifeq ($(DEBUG), 1)
+	# Flags for the compiler (C).
+	CFLAGS = -Wall -Wextra -Werror -std=gnu11 -g -I$(SOURCE_PATH)
 
-# Flags for the compiler (C++).
-CPPFLAGS = -Wall -Wextra -Werror -std=gnu++17 -g -I$(SOURCE_PATH)
+	# Flags for the compiler (C++).
+	CPPFLAGS = -Wall -Wextra -Werror -std=gnu++17 -g -I$(SOURCE_PATH)
+
+	BIN_PATH = debug
+else
+	# Flags for the compiler (C).
+	CFLAGS = -Wall -Wextra -Werror -std=gnu11 -s -I$(SOURCE_PATH)
+
+	# Flags for the compiler (C++).
+	CPPFLAGS = -Wall -Wextra -Werror -std=gnu++17 -s -I$(SOURCE_PATH)
+
+	BIN_PATH = bin
+endif
 
 # Extra flags for the compiler (C++).
 CPPFLAGS_EXTRA = -fPIC
@@ -31,6 +50,12 @@ ifdef OS
 
 		# Command to remove files.
 		RM = del /q /s
+
+		# Memory checker tool (drmemory).
+		MEMCHECK_TOOL = drmemory
+
+		# Flags for the memory checker.
+		MEMCHECK_FLAGS = -verbose 0 -ignore_kernel -show_reachable -logdir $(BIN_PATH)
 
 		# Constants for the source, object and include paths.
 		BIN_EXAMPLES_PATH = $(BIN_PATH)\examples
@@ -75,6 +100,12 @@ else
 	# Command to remove files.
 	RM = rm -rf
 
+	# Memory checker tool (valgrind).
+	MEMCHECK_TOOL = valgrind
+
+	# Flags for the memory checker.
+	MEMCHECK_FLAGS = --leak-check=full --show-leak-kinds=all --track-origins=yes
+
 	# Constants for the source, object and include paths.
 	BIN_EXAMPLES_PATH = $(BIN_PATH)/examples
 	OBJECT_PATH = $(BIN_PATH)/objects
@@ -93,7 +124,6 @@ else
 	RUDP_LIB_OBJECTS = $(addprefix $(OBJECT_PATH)/, $(RUDP_LIB_OBJS_FILES))
 	RUDP_SHARED_LIB = libRUDP.so
 	TARGET = $(BIN_PATH)/$(RUDP_SHARED_LIB)
-
 
 	# CPP client and server object files and executables.
 	CPP_CLIENT_OBJECTS = $(addprefix $(OBJECT_EXAMPLES_PATH)/, RUDP_Sender_CPP.o)
@@ -117,7 +147,7 @@ OBJECTS_EXAMPLES = $(subst $(EXAMPLES_PATH), $(OBJECT_EXAMPLES_PATH), $(SOURCES_
 RUDP_LIB_OBJS_FILES = rudp_lib.o rudp_lib_c_wrap.o rudp_lib_cpp_wrap.o
 
 # Phony targets - targets that are not files but commands to be executed by make.
-.PHONY: all default clean directories lib example example_cpp example_c install uninstall runscpp runccpp runsc runcc
+.PHONY: all default clean directories lib example example_cpp example_c install uninstall runscpp runccpp runsc runcc memcheckscpp memcheckccpp memchecksc memcheckcc
 
 # Default target - compile everything and create the executables and libraries.
 all: directories $(TARGET) example install
@@ -182,6 +212,23 @@ runsc: $(C_SERVER_TARGET)
 
 runcc: $(C_CLIENT_TARGET)
 	./$< -ip 127.0.0.1 -p 12345
+
+
+###################################################
+# Memory check the server and client executables. #
+###################################################
+memcheckscpp: $(CPP_SERVER_TARGET)
+	$(MEMCHECK_TOOL) $(MEMCHECK_FLAGS) ./$< -p 12345
+
+memcheckccpp: $(CPP_CLIENT_TARGET)
+	$(MEMCHECK_TOOL) $(MEMCHECK_FLAGS) ./$< -ip 127.0.0.1 -p 12345
+
+memchecksc: $(C_SERVER_TARGET)
+	$(MEMCHECK_TOOL) $(MEMCHECK_FLAGS) ./$< -p 12345
+
+memcheckcc: $(C_CLIENT_TARGET)
+	$(MEMCHECK_TOOL) $(MEMCHECK_FLAGS) ./$< -ip 127.0.0.1 -p 12345
+
 
 ############
 # Programs #

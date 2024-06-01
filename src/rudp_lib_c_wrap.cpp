@@ -43,7 +43,16 @@ extern "C"
 	bool rudp_connect(RUDP_socket socket, const char *dest_ip, uint16_t dest_port)
 	{
 		bool ret = false;
-		RUDP_Socket_p *sock = (RUDP_Socket_p *)socket;
+
+		RUDP_Socket_p *sock = dynamic_cast<RUDP_Socket_p *>((RUDP_Socket_p *)socket);
+
+		if (sock == nullptr)
+		{
+			std::cerr << "rudp_connect() exception at access to socket pointer:" << std::endl;
+			std::cerr << "\tInvalid socket pointer: Expected RUDP_Socket_p*, instead got NULL/invalid pointer." << std::endl;
+			return false;
+		}
+
 		try
 		{
 			ret = sock->connect(dest_ip, dest_port);
@@ -64,7 +73,16 @@ extern "C"
 	bool rudp_accept(RUDP_socket socket)
 	{
 		bool ret = false;
-		RUDP_Socket_p *sock = (RUDP_Socket_p *)socket;
+
+		RUDP_Socket_p *sock = dynamic_cast<RUDP_Socket_p *>((RUDP_Socket_p *)socket);
+
+		if (sock == nullptr)
+		{
+			std::cerr << "rudp_accept() exception at access to socket pointer:" << std::endl;
+			std::cerr << "\tInvalid socket pointer: Expected RUDP_Socket_p*, instead got NULL/invalid pointer." << std::endl;
+			return false;
+		}
+
 		try
 		{
 			ret = sock->accept();
@@ -85,7 +103,16 @@ extern "C"
 	int rudp_recv(RUDP_socket socket, void *buffer, uint32_t buffer_size)
 	{
 		int ret = -1;
-		RUDP_Socket_p *sock = (RUDP_Socket_p *)socket;
+
+		RUDP_Socket_p *sock = dynamic_cast<RUDP_Socket_p *>((RUDP_Socket_p *)socket);
+
+		if (sock == nullptr)
+		{
+			std::cerr << "rudp_recv() exception at access to socket pointer:" << std::endl;
+			std::cerr << "\tInvalid socket pointer: Expected RUDP_Socket_p*, instead got NULL/invalid pointer." << std::endl;
+			return -1;
+		}
+
 		try
 		{
 			ret = sock->recv(buffer, buffer_size);
@@ -106,7 +133,16 @@ extern "C"
 	int rudp_send(RUDP_socket socket, void *buffer, uint32_t buffer_size)
 	{
 		int ret = -1;
-		RUDP_Socket_p *sock = (RUDP_Socket_p *)socket;
+
+		RUDP_Socket_p *sock = dynamic_cast<RUDP_Socket_p *>((RUDP_Socket_p *)socket);
+
+		if (sock == nullptr)
+		{
+			std::cerr << "rudp_send() exception at access to socket pointer:" << std::endl;
+			std::cerr << "\tInvalid socket pointer: Expected RUDP_Socket_p*, instead got NULL/invalid pointer." << std::endl;
+			return -1;
+		}
+
 		try
 		{
 			ret = sock->send(buffer, buffer_size);
@@ -127,7 +163,16 @@ extern "C"
 	bool rudp_disconnect(RUDP_socket socket)
 	{
 		bool ret = false;
-		RUDP_Socket_p *sock = (RUDP_Socket_p *)socket;
+
+		RUDP_Socket_p *sock = dynamic_cast<RUDP_Socket_p *>((RUDP_Socket_p *)socket);
+
+		if (sock == nullptr)
+		{
+			std::cerr << "rudp_disconnect() exception at access to socket pointer:" << std::endl;
+			std::cerr << "\tInvalid socket pointer: Expected RUDP_Socket_p*, instead got NULL/invalid pointer." << std::endl;
+			return false;
+		}
+
 		try
 		{
 			ret = sock->disconnect();
@@ -143,6 +188,30 @@ extern "C"
 		}
 
 		return ret;
+	}
+
+	void rudp_socket_free(RUDP_socket *socket)
+	{
+		if (socket == nullptr)
+		{
+			std::cerr << "rudp_socket_free() exception at access to socket pointer:" << std::endl;
+			std::cerr << "\tInvalid socket pointer: Expected RUDP_Socket_p*, instead got NULL/invalid pointer." << std::endl;
+			return;
+		}
+
+		RUDP_Socket_p *sock = dynamic_cast<RUDP_Socket_p *>((RUDP_Socket_p *)(*socket));
+
+		if (sock == nullptr)
+		{
+			std::cerr << "rudp_socket_free() exception at access to socket pointer:" << std::endl;
+			std::cerr << "\tInvalid socket pointer: Expected RUDP_Socket_p*, instead got NULL/invalid pointer." << std::endl;
+			return;
+		}
+
+		delete sock;
+
+		// Set the pointer to NULL, to prevent further access to the freed memory.
+		*socket = nullptr;
 	}
 
 #ifdef __cplusplus

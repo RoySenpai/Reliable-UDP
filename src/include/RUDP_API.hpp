@@ -57,7 +57,7 @@ class RUDP_Socket
 		* @param max_retries The maximum number of retries for a packet, before giving up, default is 50 retries.
 		* @param debug_mode True to enable debug mode, false otherwise. Default is false.
 		* @note If the socket is a server, it will listen on the specified port.
-		* @throws std::runtime_error if the socket creation fails, or if bind() fails.
+		* @throws `std::runtime_error` if the socket creation fails, or if bind() fails.
 		*/
 		RUDP_Socket(bool isServer, uint16_t listen_port, uint16_t MTU = RUDP_MTU_DEFAULT, uint16_t timeout = RUDP_SOCKET_TIMEOUT_DEFAULT, uint16_t max_retries = RUDP_MAX_RETRIES_DEFAULT, bool debug_mode = false);
 
@@ -72,14 +72,14 @@ class RUDP_Socket
 		* @param dest_ip Destination IP address.
 		* @param dest_port Destination port.
 		* @return True if the connection is successful, false otherwise.
-		* @throws std::runtime_error if the socket is a server.
+		* @throws `std::runtime_error` if the socket is a server.
 		*/
 		bool connect(const char *dest_ip, unsigned short int dest_port);
 
 		/*
 		* @brief Accepts a connection from a client.
 		* @return True if the connection is successful, false otherwise.
-		* @throws std::runtime_error if the socket is a client.
+		* @throws `std::runtime_error` if the socket is a client.
 		*/
 		bool accept();
 
@@ -88,7 +88,7 @@ class RUDP_Socket
 		* @param buffer Buffer to store the received data.
 		* @param buffer_size Size of the buffer.
 		* @return Number of bytes received.
-		* @throws std::runtime_error if the socket is not connected.
+		* @throws `std::runtime_error` if the socket is not connected.
 		*/
 		int recv(void *buffer, uint32_t buffer_size);
 
@@ -97,7 +97,7 @@ class RUDP_Socket
 		* @param buffer Buffer containing the data to be sent.
 		* @param buffer_size Size of the buffer.
 		* @return Number of bytes sent.
-		* @throws std::runtime_error if the socket is not connected.
+		* @throws `std::runtime_error` if the socket is not connected.
 		*/
 		int send(void *buffer, uint32_t buffer_size);
 
