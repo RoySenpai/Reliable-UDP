@@ -217,7 +217,7 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 - [ ] Add support for IPv6 and other network protocols.
 - [ ] Add support for multiple connections at the same time.
 - [ ] Implement congestion control and flow control to make the library suitable for high-speed networks.
-- [ ] Improve the error detection and correction mechanisms.
+- [X] ~~Improve the error detection and correction mechanisms.~~ (Done in v1.3)
 - [ ] Add support for more systems.
 
 ## Bugs and feature requests
