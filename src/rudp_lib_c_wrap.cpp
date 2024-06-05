@@ -60,9 +60,9 @@ extern "C"
 
 		catch (const std::exception &e)
 		{
-			typedef bool (RUDP_Socket_p::*ConnectMethod)(const char*, uint16_t);
+			typedef bool (RUDP_Socket_p::*ConnectMethod)(const char *, uint16_t);
 			ConnectMethod connectMethod = &RUDP_Socket_p::connect;
-			std::cerr << "rudp_connect() exception at " << static_cast<void*>(sock) << " in " << reinterpret_cast<void*&>(connectMethod) << " (connect):" << std::endl;
+			std::cerr << "rudp_connect() exception at " << static_cast<void *>(sock) << " in " << reinterpret_cast<void *&>(connectMethod) << " (connect):" << std::endl;
 			std::cerr << "\t" << e.what() << std::endl;
 			return false;
 		}
@@ -92,7 +92,7 @@ extern "C"
 		{
 			typedef bool (RUDP_Socket_p::*AcceptMethod)();
 			AcceptMethod acceptMethod = &RUDP_Socket_p::accept;
-			std::cerr << "rudp_accept() exception at " << static_cast<void*>(sock) << " in " << reinterpret_cast<void*&>(acceptMethod) << " (accept):" << std::endl;
+			std::cerr << "rudp_accept() exception at " << static_cast<void *>(sock) << " in " << reinterpret_cast<void *&>(acceptMethod) << " (accept):" << std::endl;
 			std::cerr << "\t" << e.what() << std::endl;
 			return false;
 		}
@@ -120,9 +120,9 @@ extern "C"
 
 		catch (const std::exception &e)
 		{
-			typedef int (RUDP_Socket_p::*RecvMethod)(void*, uint32_t);
+			typedef int (RUDP_Socket_p::*RecvMethod)(void *, uint32_t);
 			RecvMethod recvMethod = &RUDP_Socket_p::recv;
-			std::cerr << "rudp_recv() exception at " << static_cast<void*>(sock) << " in " << reinterpret_cast<void*&>(recvMethod) << " (recv):" << std::endl;
+			std::cerr << "rudp_recv() exception at " << static_cast<void *>(sock) << " in " << reinterpret_cast<void *&>(recvMethod) << " (recv):" << std::endl;
 			std::cerr << "\t" << e.what() << std::endl;
 			return -1;
 		}
@@ -150,9 +150,9 @@ extern "C"
 
 		catch (const std::exception &e)
 		{
-			typedef int (RUDP_Socket_p::*SendMethod)(void*, uint32_t);
+			typedef int (RUDP_Socket_p::*SendMethod)(void *, uint32_t);
 			SendMethod sendMethod = &RUDP_Socket_p::send;
-			std::cerr << "rudp_send() exception at " << static_cast<void*>(sock) << " in " << reinterpret_cast<void*&>(sendMethod) << " (send):" << std::endl;
+			std::cerr << "rudp_send() exception at " << static_cast<void *>(sock) << " in " << reinterpret_cast<void *&>(sendMethod) << " (send):" << std::endl;
 			std::cerr << "\t" << e.what() << std::endl;
 			return -1;
 		}
@@ -182,7 +182,7 @@ extern "C"
 		{
 			typedef bool (RUDP_Socket_p::*DisconnectMethod)();
 			DisconnectMethod disconnectMethod = &RUDP_Socket_p::disconnect;
-			std::cerr << "rudp_disconnect() exception at " << static_cast<void*>(sock) << " in " << reinterpret_cast<void*&>(disconnectMethod) << " (disconnect):" << std::endl;
+			std::cerr << "rudp_disconnect() exception at " << static_cast<void *>(sock) << " in " << reinterpret_cast<void *&>(disconnectMethod) << " (disconnect):" << std::endl;
 			std::cerr << "\t" << e.what() << std::endl;
 			return false;
 		}
@@ -212,6 +212,234 @@ extern "C"
 
 		// Set the pointer to NULL, to prevent further access to the freed memory.
 		*socket = nullptr;
+	}
+
+	uint16_t rudp_get_mtu(RUDP_socket socket)
+	{
+		RUDP_Socket_p *sock = dynamic_cast<RUDP_Socket_p *>((RUDP_Socket_p *)socket);
+
+		if (sock == nullptr)
+		{
+			std::cerr << "rudp_get_mtu() exception at access to socket pointer:" << std::endl;
+			std::cerr << "\tInvalid socket pointer: Expected RUDP_Socket_p*, instead got NULL/invalid pointer." << std::endl;
+			return 0;
+		}
+
+		return sock->getMTU();
+	}
+
+	uint16_t rudp_get_timeout(RUDP_socket socket)
+	{
+		RUDP_Socket_p *sock = dynamic_cast<RUDP_Socket_p *>((RUDP_Socket_p *)socket);
+
+		if (sock == nullptr)
+		{
+			std::cerr << "rudp_get_timeout() exception at access to socket pointer:" << std::endl;
+			std::cerr << "\tInvalid socket pointer: Expected RUDP_Socket_p*, instead got NULL/invalid pointer." << std::endl;
+			return 0;
+		}
+
+		return sock->getTimeout();
+	}
+
+	uint16_t rudp_get_maxretries(RUDP_socket socket)
+	{
+		RUDP_Socket_p *sock = dynamic_cast<RUDP_Socket_p *>((RUDP_Socket_p *)socket);
+
+		if (sock == nullptr)
+		{
+			std::cerr << "rudp_get_maxretries() exception at access to socket pointer:" << std::endl;
+			std::cerr << "\tInvalid socket pointer: Expected RUDP_Socket_p*, instead got NULL/invalid pointer." << std::endl;
+			return 0;
+		}
+
+		return sock->getMaxRetries();
+	}
+
+	uint16_t rudp_get_peers_MTU(RUDP_socket socket)
+	{
+		RUDP_Socket_p *sock = dynamic_cast<RUDP_Socket_p *>((RUDP_Socket_p *)socket);
+
+		if (sock == nullptr)
+		{
+			std::cerr << "rudp_get_peers_MTU() exception at access to socket pointer:" << std::endl;
+			std::cerr << "\tInvalid socket pointer: Expected RUDP_Socket_p*, instead got NULL/invalid pointer." << std::endl;
+			return 0;
+		}
+
+		try
+		{
+			return sock->getPeersMTU();
+		}
+
+		catch (const std::exception &e)
+		{
+			typedef uint16_t (RUDP_Socket_p::*GetPeersMTUMethod)() const;
+			GetPeersMTUMethod getPeersMTUMethod = &RUDP_Socket_p::getPeersMTU;
+			std::cerr << "rudp_get_peers_MTU() exception at " << static_cast<void *>(sock) << " in " << reinterpret_cast<void *&>(getPeersMTUMethod) << " (getPeersMTU):" << std::endl;
+			std::cerr << "\t" << e.what() << std::endl;
+			return 0;
+		}
+	}
+
+	bool rudp_is_debug_mode(RUDP_socket socket)
+	{
+		RUDP_Socket_p *sock = dynamic_cast<RUDP_Socket_p *>((RUDP_Socket_p *)socket);
+
+		if (sock == nullptr)
+		{
+			std::cerr << "rudp_is_debug_mode() exception at access to socket pointer:" << std::endl;
+			std::cerr << "\tInvalid socket pointer: Expected RUDP_Socket_p*, instead got NULL/invalid pointer." << std::endl;
+			return false;
+		}
+
+		return sock->isDebugMode();
+	}
+
+	bool rudp_is_connected(RUDP_socket socket)
+	{
+		RUDP_Socket_p *sock = dynamic_cast<RUDP_Socket_p *>((RUDP_Socket_p *)socket);
+
+		if (sock == nullptr)
+		{
+			std::cerr << "rudp_is_connected() exception at access to socket pointer:" << std::endl;
+			std::cerr << "\tInvalid socket pointer: Expected RUDP_Socket_p*, instead got NULL/invalid pointer." << std::endl;
+			return false;
+		}
+
+		return sock->isConnected();
+	}
+
+	bool rudp_is_server(RUDP_socket socket)
+	{
+		RUDP_Socket_p *sock = dynamic_cast<RUDP_Socket_p *>((RUDP_Socket_p *)socket);
+
+		if (sock == nullptr)
+		{
+			std::cerr << "rudp_is_server() exception at access to socket pointer:" << std::endl;
+			std::cerr << "\tInvalid socket pointer: Expected RUDP_Socket_p*, instead got NULL/invalid pointer." << std::endl;
+			return false;
+		}
+
+		return sock->isServer();
+	}
+
+	void rudp_set_debug_mode(RUDP_socket socket, bool debug_mode)
+	{
+		RUDP_Socket_p *sock = dynamic_cast<RUDP_Socket_p *>((RUDP_Socket_p *)socket);
+
+		if (sock == nullptr)
+		{
+			std::cerr << "rudp_set_debug_mode() exception at access to socket pointer:" << std::endl;
+			std::cerr << "\tInvalid socket pointer: Expected RUDP_Socket_p*, instead got NULL/invalid pointer." << std::endl;
+			return;
+		}
+
+		sock->setDebugMode(debug_mode);
+	}
+
+	void rudp_set_MTU(RUDP_socket socket, uint16_t MTU)
+	{
+		RUDP_Socket_p *sock = dynamic_cast<RUDP_Socket_p *>((RUDP_Socket_p *)socket);
+
+		if (sock == nullptr)
+		{
+			std::cerr << "rudp_set_MTU() exception at access to socket pointer:" << std::endl;
+			std::cerr << "\tInvalid socket pointer: Expected RUDP_Socket_p*, instead got NULL/invalid pointer." << std::endl;
+			return;
+		}
+
+		try
+		{
+			sock->setMTU(MTU);
+		}
+
+		catch (const std::exception &e)
+		{
+			typedef void (RUDP_Socket_p::*SetMTUMethod)(uint16_t);
+			SetMTUMethod setMTUMethod = &RUDP_Socket_p::setMTU;
+			std::cerr << "rudp_set_MTU() exception at " << static_cast<void *>(sock) << " in " << reinterpret_cast<void *&>(setMTUMethod) << " (setMTU):" << std::endl;
+			std::cerr << "\t" << e.what() << std::endl;
+			return;
+		}
+	}
+
+	void rudp_set_timeout(RUDP_socket socket, uint16_t timeout)
+	{
+		RUDP_Socket_p *sock = dynamic_cast<RUDP_Socket_p *>((RUDP_Socket_p *)socket);
+
+		if (sock == nullptr)
+		{
+			std::cerr << "rudp_set_timeout() exception at access to socket pointer:" << std::endl;
+			std::cerr << "\tInvalid socket pointer: Expected RUDP_Socket_p*, instead got NULL/invalid pointer." << std::endl;
+			return;
+		}
+
+		try
+		{
+			sock->setTimeout(timeout);
+		}
+
+		catch (const std::exception &e)
+		{
+			typedef void (RUDP_Socket_p::*SetTimeoutMethod)(uint16_t);
+			SetTimeoutMethod setTimeoutMethod = &RUDP_Socket_p::setTimeout;
+			std::cerr << "rudp_set_timeout() exception at " << static_cast<void *>(sock) << " in " << reinterpret_cast<void *&>(setTimeoutMethod) << " (setTimeout):" << std::endl;
+			std::cerr << "\t" << e.what() << std::endl;
+			return;
+		}
+	}
+
+	void rudp_set_max_retries(RUDP_socket socket, uint16_t max_retries)
+	{
+		RUDP_Socket_p *sock = dynamic_cast<RUDP_Socket_p *>((RUDP_Socket_p *)socket);
+
+		if (sock == nullptr)
+		{
+			std::cerr << "rudp_set_max_retries() exception at access to socket pointer:" << std::endl;
+			std::cerr << "\tInvalid socket pointer: Expected RUDP_Socket_p*, instead got NULL/invalid pointer." << std::endl;
+			return;
+		}
+
+		try
+		{
+			sock->setMaxRetries(max_retries);
+		}
+
+		catch (const std::exception &e)
+		{
+			typedef void (RUDP_Socket_p::*SetMaxRetriesMethod)(uint16_t);
+			SetMaxRetriesMethod setMaxRetriesMethod = &RUDP_Socket_p::setMaxRetries;
+			std::cerr << "rudp_set_max_retries() exception at " << static_cast<void *>(sock) << " in " << reinterpret_cast<void *&>(setMaxRetriesMethod) << " (setMaxRetries):" << std::endl;
+			std::cerr << "\t" << e.what() << std::endl;
+			return;
+		}
+	}
+
+	void rudp_force_use_own_MTU(RUDP_socket socket)
+	{
+		RUDP_Socket_p *sock = dynamic_cast<RUDP_Socket_p *>((RUDP_Socket_p *)socket);
+
+		if (sock == nullptr)
+		{
+			std::cerr << "rudp_force_use_own_MTU() exception at access to socket pointer:" << std::endl;
+			std::cerr << "\tInvalid socket pointer: Expected RUDP_Socket_p*, instead got NULL/invalid pointer." << std::endl;
+			return;
+		}
+
+		try
+		{
+			sock->forceUseOwnMTU();
+		}
+
+		catch (const std::exception &e)
+		{
+			typedef void (RUDP_Socket_p::*ForceUseOwnMTUMethod)();
+			ForceUseOwnMTUMethod forceUseOwnMTUMethod = &RUDP_Socket_p::forceUseOwnMTU;
+			std::cerr << "rudp_force_use_own_MTU() exception at " << static_cast<void *>(sock) << " in " << reinterpret_cast<void *&>(forceUseOwnMTUMethod) << " (forceUseOwnMTU):" << std::endl;
+			std::cerr << "\t" << e.what() << std::endl;
+			return;
+		}
 	}
 
 #ifdef __cplusplus

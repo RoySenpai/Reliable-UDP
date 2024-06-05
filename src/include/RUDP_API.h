@@ -94,6 +94,88 @@ extern "C"
 	 */
 	void rudp_socket_free(RUDP_socket *socket);
 
+
+	/*
+	 * @brief Gets the MTU (Maximum Transmission Unit) of the network.
+	 * @return The MTU of the network, or 0 if the socket is invalid.
+	 */
+	uint16_t rudp_get_mtu(RUDP_socket socket);
+
+	/*
+	 * @brief Gets the timeout.
+	 * @return Maximum waiting time for an ACK / SYN-ACK packet in milliseconds, or 0 if the socket is invalid.
+	 */
+	uint16_t rudp_get_timeout(RUDP_socket socket);
+
+	/*
+	 * @brief Gets the maximum number of retries.
+	 * @return The maximum number of retries for a packet, before giving up, or 0 if the socket is invalid.
+	 */
+	uint16_t rudp_get_maxretries(RUDP_socket socket);
+
+	/*
+	 * @brief Gets the MTU of the peer.
+	 * @return The MTU of the peer, in case the peer has a smaller MTU, or 0 on error.
+	 */
+	uint16_t rudp_get_peers_MTU(RUDP_socket socket);
+
+	/*
+	 * @brief Checks if the socket is in debug mode.
+	 * @return True if the socket is in debug mode, false otherwise.
+	 */
+	bool rudp_is_debug_mode(RUDP_socket socket);
+
+	/*
+	 * @brief Checks if the socket is connected.
+	 * @return True if the socket is connected, false otherwise.
+	 */
+	bool rudp_is_connected(RUDP_socket socket);
+
+	/*
+	 * @brief Checks if the socket is a server.
+	 * @return True if the socket is a server, false otherwise.
+	 */
+	bool rudp_is_server(RUDP_socket socket);
+
+	/*
+	 * @brief Sets the debug mode.
+	 * @param debug_mode True to enable debug mode, false otherwise.
+	 * @note Debug mode is slower, but prints more information.
+	 */
+	void rudp_set_debug_mode(RUDP_socket socket, bool debug_mode);
+
+	/*
+	 * @brief Sets the MTU (Maximum Transmission Unit) of the network.
+	 * @param MTU The MTU of the network.
+	 * @note This value is used to calculate the maximum size of the data in a packet, be careful when changing it.
+	 * @attention This value can't be changed if the socket is connected, as the MTU is negotiated and synchronized with the peer.
+	 * @attention If the peer has a smaller MTU, the smaller MTU will be used instead for sending data.
+	 */
+	void rudp_set_MTU(RUDP_socket socket, uint16_t MTU);
+
+	/*
+	 * @brief Sets the timeout.
+	 * @param timeout Maximum waiting time for an ACK / SYN-ACK packet in milliseconds.
+	 * @note This value is used to calculate the maximum waiting time for an ACK / SYN-ACK packet.
+	 * @attention This value can't be changed if the socket is connected.
+	 */
+	void rudp_set_timeout(RUDP_socket socket, uint16_t timeout);
+
+	/*
+	 * @brief Sets the maximum number of retries.
+	 * @param max_retries The maximum number of retries for a packet, before giving up.
+	 * @note This value is used to calculate the maximum number of retries for a packet.
+	 * @attention This value can't be changed if the socket is connected.
+	 */
+	void rudp_set_max_retries(RUDP_socket socket, uint16_t max_retries);
+
+	/*
+	 * @brief Forces the socket to use its own MTU, instead of the peer's MTU.
+	 * @attention This is experimental, as it can cause failures in some cases.
+	 * @attention Use this only if you know what you are doing.
+	 */
+	void rudp_force_use_own_MTU(RUDP_socket socket);
+
 #ifdef __cplusplus
 }
 #endif // __cplusplus

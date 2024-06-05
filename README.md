@@ -1,4 +1,8 @@
 # Reliable UDP library
+**By Roy Simanovich**
+
+[![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) [![GitHub release](https://img.shields.io/github/v/release/RoySenpai/Reliable-UDP)](https://github.com/RoySenpai/Reliable-UDP/releases) [![GitHub issues](https://img.shields.io/github/issues/RoySenpai/Reliable-UDP)](https://github.com/RoySenpai/Reliable-UDP/issues) [![GitHub pull requests](https://img.shields.io/github/issues-pr/RoySenpai/Reliable-UDP)](https://github.com/RoySenpai/Reliable-UDP/pulls)
+
 
 ## Description
 
@@ -9,6 +13,8 @@ This is a fun project I did to learn more about how UDP works and how to impleme
 3. There isn't any congestion control or advanced flow control implemented, so the library is not suitable for high-speed networks, it is more of a proof of concept and a learning experience.
 4. The socket supports only one connection at a time, and no multi-threading support is provided.
 5. Flow control is implemented using the Stop-and-Wait protocol, which is a simple protocol that sends one packet at a time and waits for an acknowledgment before sending the next packet.
+6. If the MTU of one peer is smaller than the other, the smaller MTU will be used for both peers to avoid fragmentation issues. It can be overridden by the user if needed, using the `forceUseOwnMTU()` method.
+7. If there is an active connection, and a packet is received from a different peer, the packet will be ignored, and the receiver will immediately send a FIN packet to the unexpected peer to force it to close the connection.
 
 ### Deep dive
 
@@ -21,6 +27,23 @@ The library has one main class that handles the RUDP socket: `RUDP_Socket` for C
 - `RUDP_Socket::recv(void* buffer, size_t size)`: Receives a packet of data of a given size.
 - `RUDP_Socket::disconnect()`: Disconnects from the peer, if connected.
 
+Also, the class has some getters and setters for the socket settings:
+- `RUDP_Socket::getMTU()`: Returns the MTU of the socket.
+- `RUDP_Socket::getTimeout()`: Returns the timeout of the socket.
+- `RUDP_Socket::getMaxRetries()`: Returns the maximum number of retries of the socket.
+
+- `RUDP_Socket::isDebugMode()`: Returns whether the socket is in debug mode or not.
+- `RUDP_Socket::isConnected()`: Returns whether the socket is connected to a peer or not.
+- `RUDP_Socket::isServer()`: Returns whether the socket is a server or a client.
+
+- `RUDP_Socket::setMTU(uint16_t MTU)`: Sets the MTU of the socket, valid only if the socket is not connected.
+- `RUDP_Socket::setTimeout(uint16_t timeout)`: Sets the timeout of the socket.
+- `RUDP_Socket::setMaxRetries(uint16_t max_retries)`: Sets the maximum number of retries of the socket.
+- `RUDP_Socket::setDebugMode(bool debug_mode)`: Sets the debug mode status of the socket.
+
+- `RUDP_Socket::forceUseOwnMTU()`: Forces the socket to use its own MTU instead of the peer's MTU, valid only if the socket is connected. **Experimental feature, use with caution.**
+
+
 For the C version, the methods are the same, but they are prefixed with `rudp_` instead of `RUDP_Socket::`, and the socket is a pointer to a `RUDP_socket` struct.
 
 Note that `RUDP_API.h` is the header file for the C version of the library, and `RUDP_API.hpp` is the header file for the C++ version of the library.
@@ -28,7 +51,6 @@ Note that `RUDP_API.h` is the header file for the C version of the library, and 
 **Note**: In C, instead of using `free()`, you can use the `rudp_socket_free()` function to free the memory allocated for the socket.
 
 #### The RUDP header
-
 The RUDP header is a simple struct that is added to the beginning of each packet to keep track of the sequence number, type of packet, length of the payload, and a checksum for error detection. The header is defined as follows:
 
 |     Field     |      Type      | Description                                                                |
@@ -44,8 +66,30 @@ The RUDP header is a simple struct that is added to the beginning of each packet
 |              |                | -`RUDP_FLAG_FIN`: Connection is closing.                                 |
 | `_reserved` | `uint8_t[3]` | Three bytes reserved for future use. For now, used for alignment purposes. |
 
-#### The RUDP socket settings
+##### The Sequence number
+The sequence number is a 16-bit number that is used to keep track of the order of the packets of a single message. It is incremented by one for each packet sent, and it is used by the receiver to put the packets in the correct order into the buffer by adjusting the buffer pointer offset. The sequence number is also used to detect duplicate packets and to handle retransmissions.
 
+##### The Length
+The length is a 16-bit number that represents the length of the data in the packet, excluding the header. It is used by the receiver to know how many bytes to read from the packet and put into the buffer. The length is also used to detect incomplete packets and to handle retransmissions.
+
+##### The Checksum
+The checksum is a 16-bit number that is calculated for the entire packet, including the header. It is used for error detection and correction. The checksum is calculated by summing all the bytes of the packet, including the header, and then taking the one's complement of the sum. The receiver calculates the checksum for each packet it receives and compares it to the checksum in the packet header. If the checksums do not match, the packet is discarded, and the receiver sends a negative acknowledgment to the sender to request a retransmission of the packet.
+
+##### The Flags
+The protocol uses different types of packets to handle various situations. The packet types are defined as follows:
+- `SYN`: Connection initiation packet sent by the client to the server. It contains the client's settings (MTU, timeout, max_retries and debug_mode).
+- `SYN-ACK`: Connection acknowledgment packet sent by the server to the client. It contains the server's settings (MTU, timeout, max_retries and debug_mode).
+- `PSH`: Data packet sent by the sender to the receiver. It contains the data to be sent.
+- `ACK`: Acknowledgment packet sent by the receiver to the sender. It acknowledges the receipt of a packet.
+- `LAST`: Last packet of the message. It is sent by the sender to indicate that this is the last packet of the message.
+- `FIN`: Connection closing packet sent by the sender to the receiver. It indicates that the sender wants to close the connection.
+- `FIN-ACK`: Connection closing acknowledgment packet sent by the receiver to the sender. It acknowledges the receipt of the `FIN` packet and closes the connection from the receiver's side.
+
+##### The Reserved field
+The reserved field is three bytes reserved for future use. For now, they are used for alignment purposes to make sure that the header is aligned correctly in memory. The reserved field is not used for anything else at the moment, but it may be used for additional flags or information in the future. The reserved field is set to zero when the packet is created and is always ignored by the receiver.
+
+
+#### The RUDP socket settings
 The RUDP socket has a few settings that can be adjusted to change the behavior of the socket. These settings are defined as follows:
 
 |     Setting     |     Type     | Description                                                                                                    |
@@ -71,9 +115,9 @@ The RUDP socket uses a simple Stop-and-Wait protocol to send and receive data. T
 
 ## Requirements
 
-- A C++ compiler that supports C++17 or later (GCC, Clang, etc.).
+- A C++ and C compilers that supports C++17 and C11 or later (GCC, Clang, etc.).
 - A Unix-like operating system (Linux, MacOS, etc.) or Windows.
-- Root/sudo privileges to install the library (optional, but recommended).
+- Root/sudo/admin privileges to install the library (optional, but recommended).
 
 ## How to build
 
