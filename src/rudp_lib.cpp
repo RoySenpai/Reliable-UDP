@@ -37,12 +37,18 @@ bool RUDP_Socket_p::_check_packet_source(struct sockaddr *source, uint32_t sourc
 	if (result != 0)
 	{
 		if (m_debugMode) std::cerr << "Warning: Received a packet from an unknown source address (" << inet_ntoa(((struct sockaddr_in *)source)->sin_addr) << ":" << ntohs(((struct sockaddr_in *)source)->sin_port) << "), sending a rejection packet (FIN)." << std::endl;
-		_send_control_packet(RUDP_FLAG_FIN, 0, source, source_size);
+		_send_control_packet(RUDP_FLAG_FIN, 0, source, source_size); // maybe I should add an option to just ignore the packet and do nothing?
 	}
 	return result;
 }
 
 void RUDP_Socket_p::_send_control_packet(uint8_t flags, uint32_t seq_num, struct sockaddr *destination, uint32_t destination_size) {
+	if (destination == nullptr)
+	{
+		destination = (struct sockaddr *)&m_destinationAddress4;
+		destination_size = sizeof(m_destinationAddress4);
+	}
+	
 	uint8_t packet[m_protocolMTU] = {0};
 	RUDP_header header = {
 		.seq_num = htonl(seq_num),
@@ -60,27 +66,16 @@ void RUDP_Socket_p::_send_control_packet(uint8_t flags, uint32_t seq_num, struct
 		};
 		memcpy(packet + sizeof(header), &syn_packet, sizeof(RUDP_SYN_packet));
 		memcpy(packet, &header, sizeof(header));
-		header.checksum = htons(RUDP_Socket_p::_calculate_checksum(&packet, sizeof(header) + sizeof(RUDP_SYN_packet)));
+		header.checksum = htons(RUDP_Socket_p::_calculate_checksum(&packet, (sizeof(header) + sizeof(RUDP_SYN_packet))));
 	}
 
 	memcpy(packet, &header, sizeof(header));
-
-	if (destination == nullptr)
-	{
-		destination = (struct sockaddr *)&m_destinationAddress4;
-		destination_size = sizeof(m_destinationAddress4);
-	}
-
-	if (sendto(m_socketHandle, (char *)(&packet), (ntohs(header.length) + sizeof(header)), 0, destination, destination_size) == SOCKET_ERROR) _print_socket_error("Failed to send a control packet", false);
+	if (sendto(m_socketHandle, (char *)(&packet), (sizeof(header) + ntohs(header.length)), 0, destination, destination_size) == SOCKET_ERROR) _print_socket_error("Failed to send a control packet", false);
 }
 
 int RUDP_Socket_p::_check_packet_validity(void *packet, uint32_t packet_size, uint8_t expected_flags) {
 	static const std::string flag_names[] = {
-		"Syncronization (SYN)",
-		"Acknowledgement (ACK)",
-		"Push (PSH)",
-		"Last (LAST)",
-		"Closure (FIN)"
+		"Syncronization (SYN)", "Acknowledgement (ACK)", "Push (PSH)", "Last (LAST)", "Closure (FIN)"
 	};
 
 	if (packet_size < sizeof(RUDP_header))
@@ -96,8 +91,7 @@ int RUDP_Socket_p::_check_packet_validity(void *packet, uint32_t packet_size, ui
 	}
 
 	RUDP_header *header = (RUDP_header *)packet;
-	uint16_t checksum = ntohs(header->checksum);
-	uint16_t length = ntohs(header->length);
+	uint16_t checksum = ntohs(header->checksum), length = ntohs(header->length);
 	header->checksum = 0;
 	header->checksum = RUDP_Socket_p::_calculate_checksum(header, packet_size);
 
@@ -125,13 +119,70 @@ int RUDP_Socket_p::_check_packet_validity(void *packet, uint32_t packet_size, ui
 		return 0;
 	}
 
-	if (header->flags == RUDP_FLAG_FIN && (expected_flags != RUDP_FLAG_FIN && expected_flags != (RUDP_FLAG_FIN | RUDP_FLAG_ACK)))
+	if (header->flags & RUDP_FLAG_SYN)
+	{
+		if (length != sizeof(RUDP_SYN_packet))
+		{
+			if (m_debugMode)
+			{
+				std::cerr << "Packet validity error:" << std::endl;
+				std::cerr << "\tReceived SYN packet with invalid length: " << length << " bytes; can't parse the data." << std::endl;
+			}
+
+			return 0;
+		}
+
+		RUDP_SYN_packet *syn_packet = (RUDP_SYN_packet *)((uint8_t*)packet + sizeof(RUDP_header));
+		uint16_t MTU = ntohs(syn_packet->MTU), timeout = ntohs(syn_packet->timeout), max_retries = ntohs(syn_packet->max_retries), debug_mode = ntohs(syn_packet->debug_mode);
+
+		if (MTU < RUDP_MINIMAL_MTU)
+		{
+			if (m_debugMode)
+			{
+				std::cerr << "Packet validity error:" << std::endl;
+				std::cerr << "\tReceived SYN packet with invalid MTU: " << MTU << " bytes; the minimum MTU is " << RUDP_MINIMAL_MTU << " bytes." << std::endl;
+			}
+			return 0;
+		}
+
+		if (timeout < RUDP_MINIMAL_TIMEOUT)
+		{
+			if (m_debugMode)
+			{
+				std::cerr << "Packet validity error:" << std::endl;
+				std::cerr << "\tReceived SYN packet with invalid timeout: " << timeout << " milliseconds; the minimum timeout is " << RUDP_MINIMAL_TIMEOUT << " milliseconds." << std::endl;
+			}
+			return 0;
+		}
+
+		if (max_retries == 0)
+		{
+			if (m_debugMode)
+			{
+				std::cerr << "Packet validity error:" << std::endl;
+				std::cerr << "\tReceived SYN packet with invalid maximum number of retries: " << max_retries << "; the minimum number of retries is 1." << std::endl;
+			}
+			return 0;
+		}
+
+		if (debug_mode > 1)
+		{
+			if (m_debugMode)
+			{
+				std::cerr << "Packet validity error:" << std::endl;
+				std::cerr << "\tReceived SYN packet with invalid debug mode: " << debug_mode << "; debug mode flag can be either 0 or 1 (true or false)." << std::endl;
+			}
+			return 0;
+		}
+	}
+
+	if (header->flags == RUDP_FLAG_FIN)
 	{
 		if (!m_isConnected)
 		{
 			if (expected_flags & RUDP_FLAG_SYN)
 			{
-				if (m_debugMode) std::cerr << "Error: Connection was forcibly closed by the peer." << std::endl;
+				if (m_debugMode && (expected_flags == RUDP_FLAG_SYN)) std::cerr << "Warning: Received a disconnection request, but there is no active connection." << std::endl;
 				return -1;
 			}
 
@@ -144,14 +195,24 @@ int RUDP_Socket_p::_check_packet_validity(void *packet, uint32_t packet_size, ui
 			return 0;
 		}
 
+		if ((expected_flags == RUDP_FLAG_FIN) || expected_flags == (RUDP_FLAG_FIN | RUDP_FLAG_ACK)) return 1;
+
 		if (m_debugMode) std::cout << "Received a disconnection request, closing the connection with " << inet_ntoa(m_destinationAddress4.sin_addr) << ":" << ntohs(m_destinationAddress4.sin_port) << "." << std::endl;
 		_send_control_packet(RUDP_FLAG_FIN | RUDP_FLAG_ACK, 0, nullptr, 0);
 		m_isConnected = false;
 		return -1;
 	}
 
-	if (expected_flags && (header->flags != expected_flags) && (((header->flags & RUDP_FLAG_LAST) == 0) && ((header->flags & RUDP_FLAG_PSH) == 0)))
+	if ((header->flags & RUDP_FLAG_FIN) && (expected_flags == RUDP_FLAG_FIN || expected_flags == (RUDP_FLAG_FIN | RUDP_FLAG_ACK)))
 	{
+		if (m_debugMode) std::cout << "Peer has acknowledged the disconnection request, closing the connection." << std::endl;
+		m_isConnected = false;
+		return -1;
+	}
+
+	if (expected_flags && (header->flags != expected_flags))
+	{
+		if (expected_flags & RUDP_FLAG_PSH && (header->flags & RUDP_FLAG_PSH)) return 1;
 		if (m_debugMode)
 		{
 			std::string expected_flags_str, received_flags_str;
@@ -193,13 +254,7 @@ void RUDP_Socket_p::_print_socket_error(std::string message, bool throw_exceptio
 	else std::cerr << message << ": " << err_buf << std::endl;
 }
 
-RUDP_Socket_p::RUDP_Socket_p(bool isServer, uint16_t listen_port, uint16_t MTU, uint16_t timeout, uint16_t max_retries, bool debug_mode) {
-	m_isServer = isServer;
-	m_protocolMTU = MTU;
-	m_protocolTimeout = timeout;
-	m_protocolMaximumRetries = max_retries;
-	m_debugMode = debug_mode;
-
+RUDP_Socket_p::RUDP_Socket_p(bool isServer, uint16_t listen_port, uint16_t MTU, uint16_t timeout, uint16_t max_retries, bool debug_mode): m_isServer(isServer), m_debugMode(debug_mode), m_protocolMTU(MTU), m_protocolTimeout(timeout), m_protocolMaximumRetries(max_retries) {
 	if (m_protocolMTU < (RUDP_MINIMAL_MTU)) throw std::runtime_error("Invalid MTU: " + std::to_string(m_protocolMTU) + " bytes, the minimum MTU is " + std::to_string(RUDP_MINIMAL_MTU) + " bytes. Please reajust the MTU value.");
 	if (m_protocolTimeout < RUDP_MINIMAL_TIMEOUT) throw std::runtime_error("Invalid timeout: " + std::to_string(m_protocolTimeout) + " milliseconds, the minimum timeout is " + std::to_string(RUDP_MINIMAL_TIMEOUT) + " milliseconds.");
 	if (m_protocolMaximumRetries == 0) throw std::runtime_error("Invalid maximum number of retries: " + std::to_string(m_protocolMaximumRetries) + ", the minimum number of retries is 1.");
@@ -219,7 +274,7 @@ RUDP_Socket_p::RUDP_Socket_p(bool isServer, uint16_t listen_port, uint16_t MTU, 
 		server_addr.sin_addr.s_addr = INADDR_ANY;
 		server_addr.sin_port = htons(listen_port);
 
-		int enable = 1;
+		int enable = 1; // Goofy ahh socket programming
 
 		if (bind(m_socketHandle, (struct sockaddr *)&server_addr, sizeof(server_addr)) == SOCKET_ERROR || 
 			setsockopt(m_socketHandle, SOL_SOCKET, SO_REUSEADDR, (const char *)&enable, sizeof(int)) == SOCKET_ERROR)
@@ -229,7 +284,14 @@ RUDP_Socket_p::RUDP_Socket_p(bool isServer, uint16_t listen_port, uint16_t MTU, 
 }
 
 RUDP_Socket_p::~RUDP_Socket_p() {
-	if (m_isConnected) disconnect();
+	try
+	{
+		if (m_isConnected) disconnect();
+	}
+	catch (const std::exception &e)
+	{
+		std::cerr << static_cast<void *>(this) << "->disconnect(): " << e.what() << std::endl;
+	}
 	
 	if (m_socketHandle != INVALID_SOCKET)
 	{
@@ -288,11 +350,12 @@ bool RUDP_Socket_p::connect(const char *dest_ip, uint16_t dest_port) {
 		switch (packet_validity)
 		{
 			case 0:
-				if (m_debugMode) std::cerr << "Retrying connection (" << num_of_tries + 1 << "/" << m_protocolMaximumRetries << ")" << std::endl;
+				if (m_debugMode) std::cerr << "Warning: Malformed response packet received, retrying connection (" << num_of_tries + 1 << "/" << m_protocolMaximumRetries << ")." << std::endl;
 				break;
 
 			case -1:
 				throw std::runtime_error("Failed to connect to " + std::string(dest_ip) + ":" + std::to_string(dest_port) + ": connection rejected by the peer.");
+				break;
 
 			default:
 				m_isConnected = true;
@@ -345,8 +408,12 @@ bool RUDP_Socket_p::accept()
 
 		int packet_validity = _check_packet_validity(buffer, bytes_recv, RUDP_FLAG_SYN);
 
-		if (!packet_validity) continue;
-		else if (packet_validity == -1) return false;
+		if (packet_validity != 1)
+		{
+			if (m_debugMode) std::cerr << "Warning: Received an invalid connection request packet from " << inet_ntoa(client_addr.sin_addr) << ":" << ntohs(client_addr.sin_port) << ", ignoring the packet." << std::endl;
+			if (packet_validity == -1) _send_control_packet(RUDP_FLAG_FIN | RUDP_FLAG_ACK, 0, (struct sockaddr *)&client_addr, client_addr_len);
+			continue;
+		}
 
 		m_isConnected = true;
 
@@ -614,11 +681,11 @@ int RUDP_Socket_p::send(void *buffer, uint32_t buffer_size)
 				break;
 			}
 
-			if (ack_seq_num < total_packets)
-			{
-				if (m_debugMode) std::cerr << "Warning: Received an out-of-order ACK packet with sequence number " << ack_seq_num << " while expecting " << total_packets << ", retrying to send the packet (" << num_of_tries + 1 << "/" << m_protocolMaximumRetries << ")" << std::endl;
-				continue;
-			}
+			//if (ack_seq_num < total_packets)
+			//{
+				//if (m_debugMode) std::cerr << "Warning: Received an out-of-order ACK packet with sequence number " << ack_seq_num << " while expecting " << total_packets << ", continuing to the next packet." << std::endl;
+				//break;
+			//}
 
 			prev_seq_num = ack_seq_num;
 

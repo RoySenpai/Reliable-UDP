@@ -118,6 +118,7 @@ The RUDP socket uses a simple Stop-and-Wait protocol to send and receive data. T
 - A C++ and C compilers that supports C++17 and C11 or later (GCC, Clang, etc.).
 - A Unix-like operating system (Linux, MacOS, etc.) or Windows.
 - Root/sudo/admin privileges to install the library (optional, but recommended).
+- If you're using Windows, its recommended to use MinGW to build the library.
 
 ## How to build
 

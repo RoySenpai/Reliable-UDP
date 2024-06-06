@@ -19,7 +19,7 @@
 #include "include/RUDP_API.hpp"
 #include "include/RUDP_API_wrap.hpp"
 
-RUDP_Socket::RUDP_Socket(bool isServer, uint16_t listen_port, uint16_t MTU, uint16_t timeout, uint16_t max_retries, bool debug_mode) { _socket = new RUDP_Socket_p(isServer, listen_port, MTU, timeout, max_retries, debug_mode); }
+RUDP_Socket::RUDP_Socket(bool isServer, uint16_t listen_port, uint16_t MTU, uint16_t timeout, uint16_t max_retries, bool debug_mode): _socket(new RUDP_Socket_p(isServer, listen_port, MTU, timeout, max_retries, debug_mode)) {}
 
 RUDP_Socket::~RUDP_Socket() { delete _socket; }
 

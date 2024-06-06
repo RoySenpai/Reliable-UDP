@@ -43,7 +43,7 @@ ifdef OS
 		SystemRoot = $(shell echo %SystemRoot%)
 
 		# Flags for the linker (C++).
-		LDFLAGS = -shared -Wl,--out-implib,$(BIN_PATH)\libRUDP.a
+		LDFLAGS = -shared -Wl,--out-implib,$(BIN_PATH)\libRUDP.a -static
 
 		# Extra flags for the linker (C/C++).
 		LDFLAGS_EXTRA = -L$(BIN_PATH) -lRUDP -lws2_32
@@ -242,10 +242,18 @@ else ifeq ($(PLATFORM), Linux)
 endif
 
 $(CPP_CLIENT_TARGET): $(CPP_CLIENT_OBJECTS) $(TARGET)
+ifeq ($(PLATFORM), Windows)
+	$(CPPC) $(CPPFLAGS) $< -o $@ $(LDFLAGS_EXTRA) -Wl,-allow-multiple-definition -static-libgcc -static-libstdc++
+else ifeq ($(PLATFORM), Linux)
 	$(CPPC) $(CPPFLAGS) $< -o $@ $(LDFLAGS_EXTRA)
+endif
 
 $(CPP_SERVER_TARGET): $(CPP_SERVER_OBJECTS) $(TARGET)
+ifeq ($(PLATFORM), Windows)
+	$(CPPC) $(CPPFLAGS) $< -o $@ $(LDFLAGS_EXTRA) -Wl,-allow-multiple-definition -static-libgcc -static-libstdc++
+else ifeq ($(PLATFORM), Linux)
 	$(CPPC) $(CPPFLAGS) $< -o $@ $(LDFLAGS_EXTRA)
+endif
 
 $(C_CLIENT_TARGET): $(C_CLIENT_OBJECTS) $(TARGET)
 	$(CC) $(CFLAGS) $< -o $@ $(LDFLAGS_EXTRA)

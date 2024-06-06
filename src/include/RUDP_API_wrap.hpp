@@ -76,9 +76,14 @@ typedef int SOCKET;
  */
 #define RUDP_MAX_RETRIES_DEFAULT 50
 
-
+/*
+ * @brief The minimal MTU (Maximum Transmission Unit) of the network.
+ */
 #define RUDP_MINIMAL_MTU (sizeof(RUDP_header) + sizeof(RUDP_SYN_packet))
 
+/*
+ * @brief The minimal timeout.
+ */
 #define RUDP_MINIMAL_TIMEOUT 10
 
 /* Flags for Reliable UDP Protocol */
@@ -256,8 +261,8 @@ private:
 	 * @brief Sends a control packet (SYN, ACK, FIN) to the connected peer.
 	 * @param flags Flags to be set in the control packet.
 	 * @param seq_num Sequence number of the control packet.
-	 * @param destination Destination address. Use NULL for the connected peer.
-	 * @param destination_size Size of the destination address. Ignored if destination is NULL.
+	 * @param destination Destination address. Use nullptr for the connected peer (if the socket is connected).
+	 * @param destination_size Size of the destination address. Ignored if destination is nullptr.
 	 * @note This function doesn't actually check if the packet is received by the peer.
 	 * @attention This is an internal method, its not exposed to the user.
 	 */
@@ -301,7 +306,7 @@ public:
 	 * @return True if the connection is successful, false otherwise.
 	 * @throws `std::runtime_error` if the socket is a server.
 	 */
-	bool connect(const char *dest_ip, unsigned short int dest_port);
+	bool connect(const char *dest_ip, uint16_t dest_port);
 
 	/*
 	 * @brief Accepts a connection from a client.

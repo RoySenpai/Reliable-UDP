@@ -75,7 +75,7 @@ public:
 	 * @return True if the connection is successful, false otherwise.
 	 * @throws `std::runtime_error` if the socket is a server.
 	 */
-	bool connect(const char *dest_ip, unsigned short int dest_port);
+	bool connect(const char *dest_ip, uint16_t dest_port);
 
 	/*
 	 * @brief Accepts a connection from a client.
