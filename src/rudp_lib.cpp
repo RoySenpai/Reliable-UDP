@@ -558,7 +558,7 @@ int RUDP_Socket_p::recv(void *buffer, uint32_t buffer_size)
 		RUDP_header *header = (RUDP_header *)packet;
 		uint32_t packet_seq_num = ntohl(header->seq_num);
 		uint16_t packet_size = ntohs(header->length);
-		uint32_t offset = ntohl(header->seq_num) * (m_protocolMTU - sizeof(RUDP_header));
+		uint32_t offset = ntohl(header->seq_num) * (std::min(m_protocolMTU, m_peersMTU) - sizeof(RUDP_header));
 
 		if (packet_seq_num == prev_seq_num)
 		{
